@@ -1,10 +1,17 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { DashboardData } from "../types";
 
 export type InsightView = 'overview' | 'prediction';
 
 export const getFinancialInsights = async (data: DashboardData, view: InsightView = 'overview'): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Always create a fresh instance to ensure we use the latest API key from the environment/dialog
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const overviewPrompt = `
     Analyze this financial state: ${JSON.stringify(data)}
@@ -36,15 +43,29 @@ export const getFinancialInsights = async (data: DashboardData, view: InsightVie
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: view === 'prediction' ? predictionPrompt : overviewPrompt,
+      contents: [{ 
+        parts: [{ 
+          text: view === 'prediction' ? predictionPrompt : overviewPrompt 
+        }] 
+      }],
       config: {
         systemInstruction: "You are an elite financial strategist. You provide high-signal, low-noise advice based on cash flow patterns."
       }
     });
 
-    return response.text || "Insight generation failed. Please check your data inputs.";
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return "The AI Strategist is currently unavailable. Please try again in a moment.";
+    if (!response.text) {
+      return "The strategist analyzed your data but didn't provide a written response. Try adjusting your entries.";
+    }
+
+    return response.text;
+  } catch (error: any) {
+    console.error("Gemini Service Error:", error);
+    
+    const errorMessage = error?.message || "";
+    if (errorMessage.includes("Requested entity was not found")) {
+      throw new Error("MODEL_NOT_FOUND");
+    }
+    
+    return `AI Analysis paused: ${errorMessage || "Unknown connection error"}`;
   }
 };

@@ -136,14 +136,36 @@ const App: React.FC = () => {
     { name: 'Target', amount: stats.totalExpenses, avg: stats.totalExpenses * 1.05 },
   ], [stats]);
 
+  const handleKeySelection = async () => {
+    if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+      await window.aistudio.openSelectKey();
+      return true;
+    }
+    return false;
+  };
+
   const fetchInsights = useCallback(async (view: InsightView) => {
     setIsLoadingInsight(true);
     try {
+      // Check if key is available, prompt if not
+      if (window.aistudio && !(await window.aistudio.hasSelectedApiKey()) && !process.env.API_KEY) {
+        await handleKeySelection();
+      }
+
       const insight = await getFinancialInsights(data, view);
       if (view === 'overview') setOverviewInsight(insight);
       else setPredictionInsight(insight);
-    } catch (e) {
-      const errorMsg = "Error loading AI strategy.";
+    } catch (e: any) {
+      console.error("Fetch Insight Error:", e);
+      let errorMsg = "AI Analysis failed to load.";
+      
+      if (e.message === "API_KEY_MISSING" || e.message === "MODEL_NOT_FOUND") {
+        errorMsg = "Please connect your Gemini API Key to use AI features.";
+        await handleKeySelection();
+      } else {
+        errorMsg = e.message || errorMsg;
+      }
+      
       if (view === 'overview') setOverviewInsight(errorMsg);
       else setPredictionInsight(errorMsg);
     } finally {
@@ -154,10 +176,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'overview' && !overviewInsight) {
       fetchInsights('overview');
-    } else if (activeTab === 'prediction') {
+    } else if (activeTab === 'prediction' && !predictionInsight) {
       fetchInsights('prediction');
     }
-  }, [activeTab, stats.totalSavings, stats.totalExpenses, fetchInsights]);
+  }, [activeTab, fetchInsights]);
 
   const addEntry = (section: keyof DashboardData, label: string, amount: number) => {
     const newEntry: FinancialEntry = { id: generateId(), label, amount, status: TransactionStatus.UNPAID };
@@ -311,7 +333,7 @@ const App: React.FC = () => {
                   Strategic Advisor
                 </h2>
                 <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium h-[200px] overflow-y-auto no-scrollbar">
-                  {isLoadingInsight && !overviewInsight ? (
+                  {isLoadingInsight && (!overviewInsight || overviewInsight.includes("FAILED")) ? (
                      <div className="space-y-4 animate-pulse">
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-5/6"></div>
@@ -416,7 +438,7 @@ const App: React.FC = () => {
                       AI Prediction Deep-Dive
                    </h3>
                    <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 h-full overflow-y-auto pr-2 no-scrollbar">
-                     {isLoadingInsight ? (
+                     {isLoadingInsight && (!predictionInsight || predictionInsight.includes("FAILED")) ? (
                        <div className="space-y-4 animate-pulse">
                           <div className="h-3 bg-indigo-200 dark:bg-indigo-900/50 rounded w-full"></div>
                           <div className="h-3 bg-indigo-200 dark:bg-indigo-900/50 rounded w-5/6"></div>
@@ -476,7 +498,7 @@ const App: React.FC = () => {
 
       <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl px-4 pointer-events-none md:block hidden">
         <div className="dark:bg-slate-900/60 bg-white/60 backdrop-blur-xl border dark:border-slate-700/50 border-slate-200/60 p-2.5 rounded-2xl shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/5 opacity-50">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">FinTrack Pro v2.5</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">FinTrack Pro v2.6</span>
         </div>
       </footer>
     </div>
