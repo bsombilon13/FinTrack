@@ -1,36 +1,50 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { DashboardData } from "../types";
 
-export const getFinancialInsights = async (data: DashboardData): Promise<string> => {
+export type InsightView = 'overview' | 'prediction';
+
+export const getFinancialInsights = async (data: DashboardData, view: InsightView = 'overview'): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const prompt = `
-    Analyze the following financial dashboard data and provide a 3-month predictive forecast.
-    Assume recurring monthly expenses stay constant.
+  const overviewPrompt = `
+    Analyze this financial state: ${JSON.stringify(data)}
+    Provide a concise 3-sentence executive summary:
+    1. Overall health (Liquid cash vs Total Debt).
+    2. Most urgent expense or saving opportunity.
+    3. One quick win for this week.
+    Keep it snappy and encouraging.
+  `;
+
+  const predictionPrompt = `
+    You are a Financial Forecasting Expert. Analyze this data: ${JSON.stringify(data)}
+    Provide a detailed 90-day trajectory analysis.
+    Assume monthly recurring costs repeat. 
     
-    Structure the response with:
-    1. **Trajectory Summary**: What is the most likely financial state in 90 days?
-    2. **Critical Risk Factor**: Identify one specific vulnerability (e.g. "Debt to Income ratio is high" or "Low liquid emergency buffer").
-    3. **Actionable Growth Path**: Two steps to optimize the surplus by the end of the quarter.
+    Required structure in Markdown:
+    ### 90-Day Trajectory
+    How much cash is projected to remain?
     
-    Data: ${JSON.stringify(data, null, 2)}
+    ### Risk Assessment
+    What is the biggest threat to this forecast?
     
-    Format the response as clear Markdown with headers. Keep the tone sharp, professional, and predictive.
+    ### Strategic Moves
+    Two specific actions to improve the quarter-end balance.
+    
+    Be direct, analytical, and professional.
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: prompt,
+      contents: view === 'prediction' ? predictionPrompt : overviewPrompt,
       config: {
-        systemInstruction: "You are a professional financial forecaster and wealth growth strategist. You specialize in predicting trajectories based on current cash flow patterns."
+        systemInstruction: "You are an elite financial strategist. You provide high-signal, low-noise advice based on cash flow patterns."
       }
     });
 
-    return response.text || "Unable to generate prediction at this time.";
+    return response.text || "Insight generation failed. Please check your data inputs.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "The AI Forecaster is currently offline. Please check your data or try again later.";
+    return "The AI Strategist is currently unavailable. Please try again in a moment.";
   }
 };
