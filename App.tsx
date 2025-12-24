@@ -16,12 +16,15 @@ interface TabConfig {
 
 const InfoTooltip: React.FC<{ formula: string }> = ({ formula }) => (
   <div className="group relative inline-block ml-2 align-middle">
-    <svg className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-4 h-4 text-slate-400 hover:text-indigo-500 cursor-help transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 dark:bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50 border border-slate-700 font-sans font-medium">
-      <div className="uppercase text-slate-400 mb-1 tracking-widest text-[8px]">Computation</div>
-      {formula}
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 p-3 bg-slate-900 dark:bg-slate-800 text-white text-[11px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 shadow-2xl z-[100] border border-slate-700/50 backdrop-blur-md">
+      <div className="flex items-center space-x-2 mb-1.5 border-b border-slate-700/50 pb-1.5">
+        <svg className="w-3 h-3 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
+        <span className="uppercase text-indigo-300 font-bold tracking-widest text-[9px]">How it's calculated</span>
+      </div>
+      <p className="leading-relaxed font-medium text-slate-200">{formula}</p>
       <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
     </div>
   </div>
@@ -147,7 +150,6 @@ const App: React.FC = () => {
   const fetchInsights = useCallback(async (view: InsightView) => {
     setIsLoadingInsight(true);
     try {
-      // Check if key is available, prompt if not
       if (window.aistudio && !(await window.aistudio.hasSelectedApiKey()) && !process.env.API_KEY) {
         await handleKeySelection();
       }
@@ -284,12 +286,54 @@ const App: React.FC = () => {
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-8 pb-32">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in">
-            {/* Category Benchmark Chart */}
-            <div className="md:col-span-12 lg:col-span-8 bento-card rounded-3xl p-6 min-h-[350px] flex flex-col">
+            {/* Core Health Metrics Row - PROMINENT AT TOP */}
+            <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
+              <div className="bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 border-indigo-600 shadow-xl shadow-indigo-500/10">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[60px] group-hover:bg-indigo-500/20 transition-all duration-500"></div>
+                <div className="flex items-center mb-4">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.25em]">Net Cash Flow</span>
+                  <InfoTooltip formula="Available Usable Funds - All Current Monthly Obligations (Loans, Subs, Bills, etc.)" />
+                </div>
+                <div className="flex items-baseline space-x-2">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter transition-transform duration-500 group-hover:scale-[1.02] ${stats.remainingBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    ₱{stats.remainingBalance.toLocaleString()}
+                  </span>
+                  {stats.remainingBalance < 0 && <span className="text-rose-500 text-xs font-bold uppercase animate-pulse">Deficit</span>}
+                </div>
+              </div>
+
+              <div className="bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 border-slate-500 shadow-xl shadow-slate-500/10">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-slate-500/10 blur-[60px] group-hover:bg-slate-500/20 transition-all duration-500"></div>
+                <div className="flex items-center mb-4">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.25em]">Total Outflow</span>
+                  <InfoTooltip formula="Sum of all recorded expenses: Loans, Mandatory contributions, Utilities, Subscriptions, and Savings targets." />
+                </div>
+                <span className="text-4xl sm:text-5xl lg:text-6xl font-mono font-bold dark:text-white text-slate-900 tracking-tighter transition-transform duration-500 group-hover:scale-[1.02]">
+                  ₱{stats.totalExpenses.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 border-amber-500 shadow-xl shadow-amber-500/10">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[60px] group-hover:bg-amber-500/20 transition-all duration-500"></div>
+                <div className="flex items-center mb-4">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.25em]">Safety Ratio</span>
+                  <InfoTooltip formula="(Available Usable Funds / Total Monthly Expenses) * 100. Higher is better." />
+                </div>
+                <div className="flex items-baseline space-x-2">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter transition-transform duration-500 group-hover:scale-[1.02] ${stats.usable / (stats.totalExpenses || 1) >= 1 ? 'text-indigo-600' : 'text-amber-500'}`}>
+                    {Math.min(999, Math.round((stats.usable / (stats.totalExpenses || 1)) * 100))}%
+                  </span>
+                  <span className="text-slate-400 text-xs font-bold uppercase">Index</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Benchmark Chart */}
+            <div className="md:col-span-12 lg:col-span-8 bento-card rounded-3xl p-6 min-h-[400px] flex flex-col">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <div>
-                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Category vs. 3-Month Benchmark</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Comparing Current Period to Historical Average</p>
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Category Analysis</h2>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Comparing Current Period to 3-Month Historical Average</p>
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-1.5">
@@ -298,7 +342,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-1.5">
                     <div className="w-3 h-3 border-t-2 border-rose-500"></div>
-                    <span className="text-[9px] font-bold text-slate-500 uppercase">3M Avg</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">3M Benchmark</span>
                   </div>
                 </div>
               </div>
@@ -309,30 +353,30 @@ const App: React.FC = () => {
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} />
                     <Tooltip 
                       cursor={{fill: 'transparent'}}
-                      contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: 'none', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                      contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: 'none', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
                       formatter={(value: any, name: string) => [
                         `₱${Number(value).toLocaleString()}`, 
                         name === 'amount' ? 'Current' : '3M Average'
                       ]}
                     />
-                    <Bar dataKey="amount" radius={[6, 6, 0, 0]} barSize={40}>
+                    <Bar dataKey="amount" radius={[8, 8, 0, 0]} barSize={48}>
                       {categoryChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} />
+                        <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.8} />
                       ))}
                     </Bar>
-                    <Line type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, fill: '#f43f5e', strokeWidth: 2, stroke: '#fff' }} strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={3} dot={{ r: 5, fill: '#f43f5e', strokeWidth: 2, stroke: '#fff' }} strokeDasharray="6 4" />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             <div className="md:col-span-12 lg:col-span-4 space-y-6">
-              <div className="bento-card rounded-3xl p-6 dark:bg-indigo-900/10 bg-indigo-50/30 relative overflow-hidden h-full">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4 flex items-center">
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+              <div className="bento-card rounded-3xl p-6 dark:bg-indigo-900/10 bg-indigo-50/30 relative overflow-hidden h-full flex flex-col">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-6 flex items-center">
+                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                   Strategic Advisor
                 </h2>
-                <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium h-[200px] overflow-y-auto no-scrollbar">
+                <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto no-scrollbar flex-grow">
                   {isLoadingInsight && (!overviewInsight || overviewInsight.includes("FAILED")) ? (
                      <div className="space-y-4 animate-pulse">
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
@@ -342,69 +386,27 @@ const App: React.FC = () => {
                      </div>
                   ) : (
                     <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">
-                      {overviewInsight || "Fetching summary..."}
+                      {overviewInsight || "Insights will appear here shortly..."}
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Core Health Metrics Row with Info Icons */}
-            <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bento-card rounded-3xl p-8 flex flex-col justify-center min-h-[160px] relative overflow-hidden group border-t-4 border-indigo-600">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-2xl group-hover:bg-indigo-500/10 transition-all"></div>
-                <div className="flex items-center mb-3">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Net Flow</span>
-                  <InfoTooltip formula="Immediate Cash (Usable) - Total Monthly Expenses" />
-                </div>
-                <span className={`text-4xl sm:text-5xl font-mono font-bold tracking-tight transition-transform duration-500 group-hover:scale-[1.02] ${stats.remainingBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  ₱{stats.remainingBalance.toLocaleString()}
-                </span>
-              </div>
-
-              <div className="bento-card rounded-3xl p-8 flex flex-col justify-center min-h-[160px] relative overflow-hidden group border-t-4 border-slate-400">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-slate-500/5 blur-2xl group-hover:bg-slate-500/10 transition-all"></div>
-                <div className="flex items-center mb-3">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Total Out</span>
-                  <InfoTooltip formula="Sum of all Bills, Loans, Subscriptions, and Mandatory expenses." />
-                </div>
-                <span className="text-4xl sm:text-5xl font-mono font-bold dark:text-white text-slate-900 tracking-tight transition-transform duration-500 group-hover:scale-[1.02]">
-                  ₱{stats.totalExpenses.toLocaleString()}
-                </span>
-              </div>
-
-              <div className="bento-card rounded-3xl p-8 flex flex-col justify-center min-h-[160px] relative overflow-hidden group border-t-4 border-amber-500">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-2xl group-hover:bg-amber-500/10 transition-all"></div>
-                <div className="flex items-center mb-3">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Safety Factor</span>
-                  <InfoTooltip formula="(Immediate Cash / Total Monthly Expenses) * 100" />
-                </div>
-                <span className="text-4xl sm:text-5xl font-mono font-bold text-indigo-600 tracking-tight transition-transform duration-500 group-hover:scale-[1.02]">
-                  {Math.min(999, Math.round((stats.usable / (stats.totalExpenses || 1)) * 100))}%
-                </span>
-              </div>
-            </div>
-
-            {/* Sub-metrics row */}
-            <div className="md:col-span-4 bento-card rounded-3xl p-6 flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Liquid Cash</span>
-              <span className="text-3xl font-mono font-bold dark:text-white text-slate-900 tracking-tight">
-                ₱{stats.usable.toLocaleString()}
-              </span>
+            {/* Secondary metrics Row */}
+            <div className="md:col-span-4 bento-card rounded-2xl p-6 flex flex-col justify-center min-h-[100px] group border-l-2 border-indigo-500/30">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Liquid Assets</span>
+              <span className="text-2xl font-mono font-bold dark:text-white text-slate-900">₱{stats.usable.toLocaleString()}</span>
             </div>
             
-            <div className="md:col-span-4 bento-card rounded-3xl p-6 flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Unpaid Liability</span>
-              <span className="text-3xl font-mono font-bold text-rose-500 tracking-tight">
-                ₱{stats.unpaidExpenses.toLocaleString()}
-              </span>
+            <div className="md:col-span-4 bento-card rounded-2xl p-6 flex flex-col justify-center min-h-[100px] group border-l-2 border-rose-500/30">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Active Debt</span>
+              <span className="text-2xl font-mono font-bold text-rose-500">₱{stats.unpaidExpenses.toLocaleString()}</span>
             </div>
 
-            <div className="md:col-span-4 bento-card rounded-3xl p-6 flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Total Savings</span>
-              <span className="text-3xl font-mono font-bold text-emerald-500 tracking-tight">
-                ₱{stats.totalSavings.toLocaleString()}
-              </span>
+            <div className="md:col-span-4 bento-card rounded-2xl p-6 flex flex-col justify-center min-h-[100px] group border-l-2 border-emerald-500/30">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Managed Savings</span>
+              <span className="text-2xl font-mono font-bold text-emerald-500">₱{stats.totalSavings.toLocaleString()}</span>
             </div>
           </section>
         )}
@@ -496,9 +498,12 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl px-4 pointer-events-none md:block hidden">
-        <div className="dark:bg-slate-900/60 bg-white/60 backdrop-blur-xl border dark:border-slate-700/50 border-slate-200/60 p-2.5 rounded-2xl shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/5 opacity-50">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">FinTrack Pro v2.6</span>
+      <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl px-4 pointer-events-none md:block hidden opacity-60">
+        <div className="dark:bg-slate-900/60 bg-white/60 backdrop-blur-xl border dark:border-slate-700/50 border-slate-200/60 p-3 rounded-2xl shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/5 transition-all">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
+            <svg className="w-3 h-3 mr-2 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
+            FinTrack Intelligence Hub
+          </span>
         </div>
       </footer>
     </div>
