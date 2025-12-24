@@ -71,6 +71,7 @@ const DEFAULT_DATA: DashboardData = {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [isAiConnected, setIsAiConnected] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('fintrack-theme');
@@ -106,6 +107,17 @@ const App: React.FC = () => {
     document.documentElement.className = theme;
     localStorage.setItem('fintrack-theme', theme);
   }, [theme]);
+
+  // Check initial connection status
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (window.aistudio) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setIsAiConnected(hasKey || !!process.env.API_KEY);
+      }
+    };
+    checkConnection();
+  }, []);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -144,32 +156,33 @@ const App: React.FC = () => {
   const handleKeySelection = async () => {
     if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
       await window.aistudio.openSelectKey();
+      setIsAiConnected(true); // Assume success per instructions
       return true;
     }
     return false;
   };
 
-  const fetchInsights = useCallback(async (view: InsightView) => {
+  const fetchInsights = useCallback(async (view: InsightView, isRetry = false) => {
     setIsLoadingInsight(true);
     try {
-      if (window.aistudio && !(await window.aistudio.hasSelectedApiKey()) && !process.env.API_KEY) {
-        await handleKeySelection();
-      }
-
       const insight = await getFinancialInsights(data, view);
       if (view === 'overview') setOverviewInsight(insight);
       else setPredictionInsight(insight);
+      setIsAiConnected(true);
     } catch (e: any) {
       console.error("Fetch Insight Error:", e);
-      let errorMsg = "AI Analysis failed to load.";
       
-      if (e.message === "API_KEY_MISSING" || e.message === "MODEL_NOT_FOUND") {
-        errorMsg = "Please connect your Gemini API Key to use AI features.";
-        await handleKeySelection();
-      } else {
-        errorMsg = e.message || errorMsg;
+      if ((e.message === "API_KEY_MISSING" || e.message === "MODEL_NOT_FOUND") && !isRetry) {
+        setIsAiConnected(false);
+        const success = await handleKeySelection();
+        if (success) {
+          // Retry once after key selection to fix race condition
+          fetchInsights(view, true);
+          return;
+        }
       }
       
+      const errorMsg = "AI features require an active Gemini API connection.";
       if (view === 'overview') setOverviewInsight(errorMsg);
       else setPredictionInsight(errorMsg);
     } finally {
@@ -238,10 +251,18 @@ const App: React.FC = () => {
             </div>
             <div className="flex-grow">
               <h1 className="text-xl font-bold tracking-tight dark:text-white text-slate-900 leading-none">FinTrack Pro</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Intelligent Wealth Suite</p>
+              <div className="flex items-center mt-1.5 space-x-2">
+                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest leading-none">Intelligent Wealth Suite</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${isAiConnected ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></span>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-2 md:hidden">
+            {!isAiConnected && (
+              <button onClick={handleKeySelection} className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+              </button>
+            )}
             <button 
               onClick={() => fetchInsights(activeTab === 'prediction' ? 'prediction' : 'overview')} 
               disabled={isLoadingInsight}
@@ -271,13 +292,22 @@ const App: React.FC = () => {
         </div>
 
         <div className="hidden md:flex items-center space-x-3 shrink-0">
+          {!isAiConnected && (
+            <button 
+              onClick={handleKeySelection}
+              className="flex items-center space-x-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+              <span>Connect AI</span>
+            </button>
+          )}
           <button 
             onClick={() => fetchInsights(activeTab === 'prediction' ? 'prediction' : 'overview')} 
             disabled={isLoadingInsight} 
             className="flex items-center space-x-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 px-4 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
           >
             {isLoadingInsight ? <div className="animate-spin h-3 w-3 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full"></div> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>}
-            <span className="hidden lg:inline">Refresh AI</span>
+            <span className="hidden lg:inline">Refresh Insights</span>
           </button>
           <button onClick={toggleTheme} className="p-2.5 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 dark:text-slate-400 hover:text-indigo-600 transition-all active:scale-95">
             {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
@@ -380,10 +410,10 @@ const App: React.FC = () => {
                     <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                     Strategic Advisor
                   </div>
-                  {!isLoadingInsight && <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>}
+                  {!isLoadingInsight && <span className={`flex h-2 w-2 rounded-full ${isAiConnected ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></span>}
                 </h2>
                 <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto no-scrollbar flex-grow pr-2">
-                  {isLoadingInsight && (!overviewInsight || overviewInsight.includes("FAILED")) ? (
+                  {isLoadingInsight ? (
                      <div className="space-y-4 animate-pulse">
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-5/6"></div>
@@ -392,7 +422,16 @@ const App: React.FC = () => {
                      </div>
                   ) : (
                     <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">
-                      {overviewInsight || "Insights will appear here shortly..."}
+                      {overviewInsight || (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <p className="text-slate-500 dark:text-slate-400 mb-4">Intelligence features are pending connection.</p>
+                          {!isAiConnected && (
+                            <button onClick={handleKeySelection} className="text-[10px] font-bold uppercase px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors">
+                              Connect Gemini API
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -446,7 +485,7 @@ const App: React.FC = () => {
                       AI Prediction Deep-Dive
                    </h3>
                    <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 h-full overflow-y-auto pr-2 no-scrollbar">
-                     {isLoadingInsight && (!predictionInsight || predictionInsight.includes("FAILED")) ? (
+                     {isLoadingInsight ? (
                        <div className="space-y-4 animate-pulse">
                           <div className="h-3 bg-indigo-200 dark:bg-indigo-900/50 rounded w-full"></div>
                           <div className="h-3 bg-indigo-200 dark:bg-indigo-900/50 rounded w-5/6"></div>
@@ -455,7 +494,16 @@ const App: React.FC = () => {
                        </div>
                      ) : (
                        <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">
-                         {predictionInsight || "Analyzing trajectory..."}
+                         {predictionInsight || (
+                           <div className="flex flex-col items-center justify-center py-8 text-center">
+                             <p className="text-slate-500 dark:text-slate-400 mb-4">Forecasting requires an active API connection.</p>
+                             {!isAiConnected && (
+                               <button onClick={handleKeySelection} className="text-[10px] font-bold uppercase px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors">
+                                 Setup Forecaster
+                               </button>
+                             )}
+                           </div>
+                         )}
                        </div>
                      )}
                    </div>
@@ -508,7 +556,7 @@ const App: React.FC = () => {
         <div className="dark:bg-slate-900/60 bg-white/60 backdrop-blur-xl border dark:border-slate-700/50 border-slate-200/60 p-3 rounded-2xl shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/5 transition-all">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
             <svg className="w-3 h-3 mr-2 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
-            FinTrack Intelligence Hub v2.7
+            FinTrack Intelligence Hub v2.8
           </span>
         </div>
       </footer>
