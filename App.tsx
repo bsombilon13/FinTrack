@@ -16,16 +16,18 @@ interface TabConfig {
 
 const InfoTooltip: React.FC<{ formula: string }> = ({ formula }) => (
   <div className="group relative inline-block ml-2 align-middle">
-    <svg className="w-4 h-4 text-slate-400 hover:text-indigo-500 cursor-help transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 p-3 bg-slate-900 dark:bg-slate-800 text-white text-[11px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 shadow-2xl z-[100] border border-slate-700/50 backdrop-blur-md">
-      <div className="flex items-center space-x-2 mb-1.5 border-b border-slate-700/50 pb-1.5">
-        <svg className="w-3 h-3 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
-        <span className="uppercase text-indigo-300 font-bold tracking-widest text-[9px]">How it's calculated</span>
+    <div className="p-1 rounded-full hover:bg-indigo-500/10 transition-colors cursor-help">
+      <svg className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-64 p-3 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-[11px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 shadow-2xl z-[100] border border-slate-700/50 transform translate-y-2 group-hover:translate-y-0">
+      <div className="flex items-center space-x-2 mb-2 border-b border-slate-700/50 pb-2">
+        <svg className="w-3.5 h-3.5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
+        <span className="uppercase text-indigo-300 font-bold tracking-widest text-[9px]">Computation Logic</span>
       </div>
       <p className="leading-relaxed font-medium text-slate-200">{formula}</p>
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900/95 dark:border-t-slate-800/95"></div>
     </div>
   </div>
 );
@@ -288,8 +290,8 @@ const App: React.FC = () => {
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in">
             {/* Core Health Metrics Row - PROMINENT AT TOP */}
             <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
-              <div className="bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 border-indigo-600 shadow-xl shadow-indigo-500/10">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[60px] group-hover:bg-indigo-500/20 transition-all duration-500"></div>
+              <div className={`bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 shadow-xl transition-all duration-500 ${stats.remainingBalance >= 0 ? 'border-emerald-600 shadow-emerald-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
+                <div className={`absolute top-0 right-0 w-32 h-32 blur-[60px] group-hover:blur-[80px] transition-all duration-500 ${stats.remainingBalance >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}></div>
                 <div className="flex items-center mb-4">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.25em]">Net Cash Flow</span>
                   <InfoTooltip formula="Available Usable Funds - All Current Monthly Obligations (Loans, Subs, Bills, etc.)" />
@@ -313,8 +315,8 @@ const App: React.FC = () => {
                 </span>
               </div>
 
-              <div className="bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 border-amber-500 shadow-xl shadow-amber-500/10">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[60px] group-hover:bg-amber-500/20 transition-all duration-500"></div>
+              <div className={`bento-card rounded-[2rem] p-8 flex flex-col justify-center min-h-[180px] relative overflow-hidden group border-t-4 shadow-xl transition-all duration-500 ${stats.usable / (stats.totalExpenses || 1) >= 1 ? 'border-indigo-600 shadow-indigo-500/10' : 'border-amber-500 shadow-amber-500/10'}`}>
+                <div className={`absolute top-0 right-0 w-32 h-32 blur-[60px] group-hover:blur-[80px] transition-all duration-500 ${stats.usable / (stats.totalExpenses || 1) >= 1 ? 'bg-indigo-500/10' : 'bg-amber-500/10'}`}></div>
                 <div className="flex items-center mb-4">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.25em]">Safety Ratio</span>
                   <InfoTooltip formula="(Available Usable Funds / Total Monthly Expenses) * 100. Higher is better." />
@@ -371,12 +373,16 @@ const App: React.FC = () => {
             </div>
 
             <div className="md:col-span-12 lg:col-span-4 space-y-6">
-              <div className="bento-card rounded-3xl p-6 dark:bg-indigo-900/10 bg-indigo-50/30 relative overflow-hidden h-full flex flex-col">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-6 flex items-center">
-                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                  Strategic Advisor
+              <div className="bento-card rounded-3xl p-6 dark:bg-indigo-950/20 bg-indigo-50/20 backdrop-blur-2xl relative overflow-hidden h-full flex flex-col border border-indigo-500/20">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-6 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Strategic Advisor
+                  </div>
+                  {!isLoadingInsight && <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>}
                 </h2>
-                <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto no-scrollbar flex-grow">
+                <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto no-scrollbar flex-grow pr-2">
                   {isLoadingInsight && (!overviewInsight || overviewInsight.includes("FAILED")) ? (
                      <div className="space-y-4 animate-pulse">
                         <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
@@ -502,7 +508,7 @@ const App: React.FC = () => {
         <div className="dark:bg-slate-900/60 bg-white/60 backdrop-blur-xl border dark:border-slate-700/50 border-slate-200/60 p-3 rounded-2xl shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/5 transition-all">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
             <svg className="w-3 h-3 mr-2 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
-            FinTrack Intelligence Hub
+            FinTrack Intelligence Hub v2.7
           </span>
         </div>
       </footer>
