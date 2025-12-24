@@ -3,7 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { DashboardData } from "../types";
 
 export const getFinancialInsights = async (data: DashboardData): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Use named parameter for apiKey and avoid fallback string as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
     Analyze the following financial dashboard data and provide 3-4 concise, professional bullet points of actionable advice or observations. 

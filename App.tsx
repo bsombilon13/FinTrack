@@ -101,6 +101,38 @@ const App: React.FC = () => {
     }
   }, [data]);
 
+  const handleExportCSV = () => {
+    const headers = ["Category", "Label", "Amount", "Status"];
+    const rows: string[][] = [];
+
+    // Use type assertion to help TypeScript understand that values are FinancialEntry arrays.
+    (Object.entries(data) as [keyof DashboardData, FinancialEntry[]][]).forEach(([category, entries]) => {
+      entries.forEach((entry: FinancialEntry) => {
+        rows.push([
+          category.replace(/([A-Z])/g, ' $1').trim(), // Make category readable
+          entry.label,
+          entry.amount.toString(),
+          entry.status || "N/A"
+        ]);
+      });
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `FinTrack_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   useEffect(() => {
     fetchInsights();
   }, []);
@@ -128,21 +160,32 @@ const App: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex items-center space-x-8">
-          <div className="hidden sm:block">
+        <div className="flex items-center space-x-4 sm:space-x-8">
+          <div className="hidden lg:block">
             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-right mb-0.5">Global Liquidity</div>
             <div className={`text-xl font-mono font-bold text-right ${stats.remainingBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               ₱{stats.remainingBalance.toLocaleString()}
             </div>
           </div>
-          <button 
-            onClick={fetchInsights}
-            disabled={isLoadingInsight}
-            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isLoadingInsight ? <div className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></div> : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/></svg>}
-            <span>{isLoadingInsight ? 'Analyzing...' : 'AI Insights'}</span>
-          </button>
+          
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={handleExportCSV}
+              className="p-2.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all active:scale-95"
+              title="Export Data as CSV"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </button>
+            <button 
+              onClick={fetchInsights}
+              disabled={isLoadingInsight}
+              className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingInsight ? <div className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></div> : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/></svg>}
+              <span className="hidden sm:inline">{isLoadingInsight ? 'Analyzing...' : 'AI Insights'}</span>
+              <span className="sm:hidden">{isLoadingInsight ? '...' : 'AI'}</span>
+            </button>
+          </div>
         </div>
       </header>
 
