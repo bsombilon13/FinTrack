@@ -120,7 +120,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     type="number" 
                     value={editAmount}
                     onChange={(e) => setEditAmount(e.target.value)}
-                    className="w-24 bg-slate-100 dark:bg-slate-900 border border-indigo-500/50 rounded px-2 py-1 text-xs dark:text-slate-100 text-slate-900 focus:outline-none transition-colors"
+                    className="w-28 bg-slate-100 dark:bg-slate-900 border border-indigo-500/50 rounded px-2 py-1 text-xs dark:text-slate-100 text-slate-900 focus:outline-none transition-colors"
                   />
                   <button onClick={() => saveEdit(entry.id)} className="text-emerald-500 hover:text-emerald-400 p-1">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
@@ -216,7 +216,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
             placeholder="Amount" 
             value={newAmount}
             onChange={(e) => setNewAmount(e.target.value)}
-            className="w-16 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] dark:text-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+            className="w-28 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] dark:text-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
           />
           <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white p-1.5 rounded-lg transition-colors shadow-md shadow-indigo-500/20">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>

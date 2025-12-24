@@ -98,6 +98,7 @@ const App: React.FC = () => {
 
   const stats = useMemo(() => {
     const savings = calculateTotal(data.savingsAccounts);
+    const contributions = calculateTotal(data.savingsContribution);
     const usable = calculateTotal(data.accountBalances);
     const allExpenses = [
       ...data.loans, ...data.subscriptions, ...data.savingsContribution,
@@ -107,7 +108,12 @@ const App: React.FC = () => {
     const unpaidExpenses = calculateTotal(allExpenses.filter(e => e.status !== TransactionStatus.PAID));
     
     return {
-      savings, usable, totalExpenses, unpaidExpenses,
+      savings,
+      contributions,
+      totalSavings: savings + contributions,
+      usable, 
+      totalExpenses, 
+      unpaidExpenses,
       remainingBalance: usable - totalExpenses,
     };
   }, [data]);
@@ -263,24 +269,74 @@ const App: React.FC = () => {
                     </div>
                     <div>
                       <div className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">₱{stats.savings.toLocaleString()}</div>
-                      <div className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Locked Wealth</div>
+                      <div className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Savings Liquid</div>
                     </div>
                   </div>
                </div>
             </div>
 
+            {/* Total Savings Bento */}
+            <div className="md:col-span-12 lg:col-span-4 bento-card rounded-3xl p-6 flex flex-col justify-between overflow-hidden relative group transition-colors duration-300 bg-emerald-500/5 border-emerald-500/20">
+               <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-600/10 blur-3xl group-hover:bg-emerald-600/20 transition-all"></div>
+               <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-500 mb-6 flex items-center">
+                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                 Total Savings
+               </h2>
+               <div className="space-y-4">
+                  <div>
+                    <div className="text-4xl font-mono font-bold dark:text-emerald-400 text-emerald-600 leading-tight transition-colors">
+                      ₱{stats.totalSavings.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Accounts + Contributions</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-6 border-t dark:border-slate-800 border-slate-200 transition-colors">
+                    <div>
+                      <div className="text-lg font-mono font-bold text-slate-700 dark:text-slate-300">₱{stats.savings.toLocaleString()}</div>
+                      <div className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Main Accounts</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-mono font-bold text-indigo-500">₱{stats.contributions.toLocaleString()}</div>
+                      <div className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Target Allocations</div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* AI Strategy Bento */}
+            <div className="md:col-span-12 lg:col-span-4 bento-card rounded-3xl p-6 dark:bg-gradient-to-br dark:from-indigo-900/20 dark:to-slate-900/40 bg-indigo-50/30 relative overflow-hidden group min-h-[220px]">
+              <div className="absolute top-2 right-2 glow-pulse">
+                <div className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.8)]"></div>
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4 flex items-center">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                AI Financial Strategist
+              </h2>
+              <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto max-h-[160px] pr-2 scrollbar-thin">
+                {isLoadingInsight ? (
+                  <div className="space-y-3">
+                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-full animate-pulse"></div>
+                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-4/5 animate-pulse"></div>
+                  </div>
+                ) : (
+                  <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">
+                    {aiInsight || "Initiate analysis to receive your personalized wealth preservation strategy."}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Visualization Bento */}
-            <div className="md:col-span-6 lg:col-span-4 bento-card rounded-3xl p-6 flex flex-col justify-between min-h-[300px]">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Portfolio Mix</h2>
-                <div className="flex items-center space-x-3">
-                   <div className="flex items-center space-x-1">
-                     <div className="w-2.5 h-1.5 bg-indigo-500/80 rounded-sm"></div>
-                     <span className="text-[8px] font-bold text-slate-500 uppercase">Current</span>
+            <div className="md:col-span-12 lg:col-span-12 bento-card rounded-3xl p-6 flex flex-col justify-between min-h-[350px]">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Portfolio Mix Analysis</h2>
+                <div className="flex items-center space-x-4">
+                   <div className="flex items-center space-x-1.5">
+                     <div className="w-3 h-2 bg-indigo-500/80 rounded-sm"></div>
+                     <span className="text-[9px] font-bold text-slate-500 uppercase">Current Status</span>
                    </div>
-                   <div className="flex items-center space-x-1">
-                     <div className="w-2.5 h-0.5 bg-slate-400 rounded-full"></div>
-                     <span className="text-[8px] font-bold text-slate-500 uppercase">3mo Avg</span>
+                   <div className="flex items-center space-x-1.5">
+                     <div className="w-3 h-0.5 bg-slate-400 rounded-full border-t border-dashed border-slate-500"></div>
+                     <span className="text-[9px] font-bold text-slate-500 uppercase">3-Month Benchmark</span>
                    </div>
                 </div>
               </div>
@@ -295,7 +351,7 @@ const App: React.FC = () => {
                         return [formatted, name === 'amount' ? 'Current' : '3mo Average'];
                       }}
                     />
-                    <Bar dataKey="amount" radius={[6, 6, 6, 6]} barSize={40}>
+                    <Bar dataKey="amount" radius={[6, 6, 6, 6]} barSize={50}>
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} fillOpacity={0.8} />
                       ))}
@@ -305,45 +361,22 @@ const App: React.FC = () => {
                       dataKey="avg" 
                       stroke={theme === 'dark' ? '#94a3b8' : '#64748b'} 
                       strokeWidth={2} 
-                      strokeDasharray="4 4"
-                      dot={{ r: 3, fill: theme === 'dark' ? '#94a3b8' : '#64748b', strokeWidth: 0 }}
-                      activeDot={{ r: 5 }}
+                      strokeDasharray="6 6"
+                      dot={{ r: 4, fill: theme === 'dark' ? '#94a3b8' : '#64748b', strokeWidth: 0 }}
+                      activeDot={{ r: 6 }}
                     />
-                    <XAxis dataKey="name" hide />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <div className="grid grid-cols-2 gap-y-2 mt-6 px-2">
+              <div className="flex justify-center flex-wrap gap-6 mt-6 px-2">
                  {chartData.map((item, i) => (
                    <div key={item.name} className="flex items-center space-x-2">
-                     <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[i]}}></div>
+                     <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: COLORS[i]}}></div>
                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{item.name}</span>
+                     <span className="text-[10px] font-mono font-bold dark:text-slate-300 text-slate-700">₱{item.amount.toLocaleString()}</span>
                    </div>
                  ))}
-              </div>
-            </div>
-
-            {/* AI Strategy Bento */}
-            <div className="md:col-span-6 lg:col-span-4 bento-card rounded-3xl p-6 dark:bg-gradient-to-br dark:from-indigo-900/20 dark:to-slate-900/40 bg-indigo-50/30 relative overflow-hidden group min-h-[300px]">
-              <div className="absolute top-2 right-2 glow-pulse">
-                <div className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.8)]"></div>
-              </div>
-              <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4 flex items-center">
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
-                AI Financial Strategist
-              </h2>
-              <div className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-medium overflow-y-auto max-h-[200px] pr-2 scrollbar-thin">
-                {isLoadingInsight ? (
-                  <div className="space-y-3">
-                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-full animate-pulse"></div>
-                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-4/5 animate-pulse"></div>
-                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-5/6 animate-pulse"></div>
-                  </div>
-                ) : (
-                  <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">
-                    {aiInsight || "Initiate analysis to receive your personalized wealth preservation strategy."}
-                  </div>
-                )}
               </div>
             </div>
           </section>
