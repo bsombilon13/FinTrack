@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { FinancialEntry, TransactionStatus } from '../types';
 
@@ -36,8 +37,10 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newLabel && !isNaN(parseFloat(newAmount))) {
-      onAdd(newLabel, parseFloat(newAmount));
+    const amount = parseFloat(newAmount);
+    // Validation: Label must be non-empty and Amount must be a non-negative number
+    if (newLabel.trim() !== '' && !isNaN(amount) && amount >= 0) {
+      onAdd(newLabel.trim(), amount);
       setNewLabel('');
       setNewAmount('');
     }
@@ -58,8 +61,9 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
 
   const saveEdit = (id: string) => {
     const amount = parseFloat(editAmount);
-    if (editLabel && !isNaN(amount)) {
-      onUpdateEntry(id, editLabel, amount);
+    // Validation: Label must be non-empty and Amount must be a non-negative number
+    if (editLabel.trim() !== '' && !isNaN(amount) && amount >= 0) {
+      onUpdateEntry(id, editLabel.trim(), amount);
       setEditingId(null);
     }
   };
@@ -115,6 +119,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                   onChange={(e) => setEditLabel(e.target.value)}
                   className="bg-slate-100 dark:bg-slate-900 border border-indigo-500/50 rounded px-2 py-1 text-xs dark:text-slate-100 text-slate-900 focus:outline-none transition-colors w-full"
                   placeholder="Label"
+                  required
                   autoFocus
                 />
                 <div className="flex items-center space-x-2">
@@ -124,6 +129,9 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     onChange={(e) => setEditAmount(e.target.value)}
                     className="flex-grow bg-slate-100 dark:bg-slate-900 border border-indigo-500/50 rounded px-2 py-1 text-xs dark:text-slate-100 text-slate-900 focus:outline-none transition-colors"
                     placeholder="Amount"
+                    min="0"
+                    step="any"
+                    required
                   />
                   <button onClick={() => saveEdit(entry.id)} className="text-emerald-500 hover:text-emerald-400 p-1">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
@@ -213,6 +221,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
             className="flex-1 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] dark:text-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+            required
           />
           <div className="flex space-x-1.5">
             <input 
@@ -221,6 +230,9 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
               value={newAmount}
               onChange={(e) => setNewAmount(e.target.value)}
               className="flex-grow bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] dark:text-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+              min="0"
+              step="any"
+              required
             />
             <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white p-1.5 rounded-lg transition-colors shadow-md shadow-indigo-500/20 flex-shrink-0">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
