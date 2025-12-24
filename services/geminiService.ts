@@ -3,20 +3,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { DashboardData } from "../types";
 
 export const getFinancialInsights = async (data: DashboardData): Promise<string> => {
-  // Use named parameter for apiKey and avoid fallback string as per guidelines.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
-    Analyze the following financial dashboard data and provide 3-4 concise, professional bullet points of actionable advice or observations. 
-    Focus on:
-    1. Cash flow (Remaining Balance).
-    2. Savings vs. Debt ratio.
-    3. Potential areas to cut back (Subscriptions, Other Expenses).
-    4. Managing unpaid items.
-
+    Analyze the following financial dashboard data and provide a 3-month predictive forecast.
+    Assume recurring monthly expenses stay constant.
+    
+    Structure the response with:
+    1. **Trajectory Summary**: What is the most likely financial state in 90 days?
+    2. **Critical Risk Factor**: Identify one specific vulnerability (e.g. "Debt to Income ratio is high" or "Low liquid emergency buffer").
+    3. **Actionable Growth Path**: Two steps to optimize the surplus by the end of the quarter.
+    
     Data: ${JSON.stringify(data, null, 2)}
     
-    Format the response as clear Markdown.
+    Format the response as clear Markdown with headers. Keep the tone sharp, professional, and predictive.
   `;
 
   try {
@@ -24,13 +24,13 @@ export const getFinancialInsights = async (data: DashboardData): Promise<string>
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
-        systemInstruction: "You are a professional financial advisor with a sharp, encouraging, and analytical tone."
+        systemInstruction: "You are a professional financial forecaster and wealth growth strategist. You specialize in predicting trajectories based on current cash flow patterns."
       }
     });
 
-    return response.text || "Unable to generate insights at this time.";
+    return response.text || "Unable to generate prediction at this time.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Error connecting to AI advisor. Please try again later.";
+    return "The AI Forecaster is currently offline. Please check your data or try again later.";
   }
 };

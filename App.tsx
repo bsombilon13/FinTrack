@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FinancialEntry, DashboardData, TransactionStatus } from './types';
 import FinancialCard from './components/FinancialCard';
 import { getFinancialInsights } from './services/geminiService';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, Tooltip, Cell, CartesianGrid, Area } from 'recharts';
 
-type TabType = 'overview' | 'assets' | 'obligations';
+type TabType = 'overview' | 'assets' | 'obligations' | 'prediction';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -88,7 +89,6 @@ const App: React.FC = () => {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   const addEntry = (section: keyof DashboardData, label: string, amount: number) => {
@@ -141,32 +141,15 @@ const App: React.FC = () => {
       const insight = await getFinancialInsights(data);
       setAiInsight(insight);
     } catch (e) {
-      setAiInsight("Error loading AI insights.");
+      setAiInsight("Error loading AI predictions.");
     } finally {
       setIsLoadingInsight(false);
     }
   }, [data]);
 
-  const handleExportCSV = () => {
-    const headers = ["Category", "Label", "Amount", "Status"];
-    const rows: string[][] = [];
-    (Object.entries(data) as [keyof DashboardData, FinancialEntry[]][]).forEach(([category, entries]) => {
-      entries.forEach((entry: FinancialEntry) => {
-        rows.push([category.replace(/([A-Z])/g, ' $1').trim(), entry.label, entry.amount.toString(), entry.status || "N/A"]);
-      });
-    });
-    const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `FinTrack_Export_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
-
   useEffect(() => {
     fetchInsights();
-  }, []);
+  }, [activeTab === 'prediction']); // Refresh specifically for prediction view
 
   const chartData = useMemo(() => [
     { name: 'Funds', amount: stats.usable, avg: stats.usable * 0.94 },
@@ -174,6 +157,20 @@ const App: React.FC = () => {
     { name: 'Savings', amount: stats.savings, avg: stats.savings * 0.88 },
     { name: 'Target', amount: stats.totalExpenses, avg: stats.totalExpenses * 1.05 },
   ], [stats]);
+
+  // Prediction Data Calculation
+  const predictionData = useMemo(() => {
+    const monthlyNet = stats.remainingBalance;
+    const now = new Date();
+    const months = [];
+    for(let i=1; i<=3; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const name = date.toLocaleString('default', { month: 'short' });
+      const balance = stats.usable + (monthlyNet * i);
+      months.push({ name, balance, safety: Math.max(0, Math.min(100, (balance / (stats.totalExpenses || 1)) * 100)) });
+    }
+    return months;
+  }, [stats]);
 
   const COLORS = ['#6366f1', '#f43f5e', '#10b981', '#fbbf24'];
 
@@ -192,6 +189,11 @@ const App: React.FC = () => {
       id: 'obligations',
       label: 'Obligations',
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+    },
+    {
+      id: 'prediction',
+      label: 'Prediction',
+      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
     }
   ];
 
@@ -212,26 +214,16 @@ const App: React.FC = () => {
             </button>
           </div>
         </div>
-        <nav className="flex flex-col md:flex-row dark:bg-slate-900/50 bg-white/50 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 w-full md:w-auto transition-all duration-300 gap-1.5">
+        <nav className="flex flex-wrap dark:bg-slate-900/50 bg-white/50 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 w-full md:w-auto transition-all duration-300 gap-1.5">
           {TABS.map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} title={tab.label} className={`flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-500 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800/50'}`}>
               <span className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'scale-100 opacity-60'}`}>{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </nav>
-        <div className="hidden md:flex items-center space-x-6">
-          <div className="text-right">
-            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Global Liquidity</div>
-            <div className={`text-xl font-mono font-bold ${stats.remainingBalance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>₱{stats.remainingBalance.toLocaleString()}</div>
-          </div>
-          <button onClick={handleExportCSV} className="p-2.5 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-400 hover:text-indigo-600 transition-all active:scale-95" title="Export CSV"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></button>
-          <button onClick={fetchInsights} disabled={isLoadingInsight} className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50" title="Get AI-powered financial advice">
-            {isLoadingInsight ? <div className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></div> : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/></svg>}
-            <span>{isLoadingInsight ? 'Analyzing...' : 'AI Insights'}</span>
-          </button>
-        </div>
       </header>
+
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-8 pb-32">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in">
@@ -282,21 +274,99 @@ const App: React.FC = () => {
                 {isLoadingInsight ? <div className="space-y-3"><div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-full animate-pulse"></div><div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full w-4/5 animate-pulse"></div></div> : <div className="prose dark:prose-invert prose-slate prose-sm max-w-none">{aiInsight || "Initiate analysis to receive your strategy."}</div>}
               </div>
             </div>
-            <div className="md:col-span-12 lg:col-span-12 bento-card rounded-3xl p-6 flex flex-col justify-between min-h-[350px]">
-              <div className="flex justify-between items-center mb-6"><h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Portfolio Mix Analysis</h2></div>
-              <div className="flex-grow w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData}>
-                    <Tooltip cursor={{fill: 'rgba(99, 102, 241, 0.05)'}} contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: theme === 'dark' ? '1px solid #1e293b' : '1px solid #e2e8f0', borderRadius: '12px', fontSize: '12px', color: theme === 'dark' ? '#f8fafc' : '#0f172a' }} formatter={(value: any, name: string) => [`₱${Number(value).toLocaleString()}`, name === 'amount' ? 'Current' : '3mo Average']}/>
-                    <Bar dataKey="amount" radius={[6, 6, 6, 6]} barSize={50}>{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} fillOpacity={0.8} />)}</Bar>
-                    <Line type="monotone" dataKey="avg" stroke={theme === 'dark' ? '#94a3b8' : '#64748b'} strokeWidth={2} strokeDasharray="6 6" dot={{ r: 4, fill: theme === 'dark' ? '#94a3b8' : '#64748b', strokeWidth: 0 }} activeDot={{ r: 6 }}/>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </section>
         )}
+
+        {activeTab === 'prediction' && (
+          <section key="prediction" className="space-y-8 animate-in">
+             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Prediction Chart */}
+                <div className="lg:col-span-8 bento-card rounded-3xl p-6 min-h-[400px] flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">90-Day Liquidity Projection</h2>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Based on current Burn Rate</p>
+                    </div>
+                  </div>
+                  <div className="flex-grow w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={predictionData}>
+                        <defs>
+                          <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} />
+                        <Tooltip cursor={{stroke: '#8b5cf6', strokeWidth: 2}} contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: 'none', borderRadius: '12px', fontSize: '12px' }} formatter={(val: any) => [`₱${Number(val).toLocaleString()}`, 'Projected Balance']}/>
+                        <Area type="monotone" dataKey="balance" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
+                        <Line type="step" dataKey="balance" stroke="#d946ef" strokeWidth={2} dot={{ r: 4, fill: '#d946ef' }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Safety Score Bento */}
+                <div className="lg:col-span-4 bento-card rounded-3xl p-6 flex flex-col items-center justify-center text-center">
+                   <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-8">Quarter-End Safety Score</h3>
+                   <div className="relative w-40 h-40 flex items-center justify-center mb-6">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle cx="80" cy="80" r="70" fill="none" stroke="currentColor" strokeWidth="12" className="text-slate-200 dark:text-slate-800" />
+                        <circle cx="80" cy="80" r="70" fill="none" stroke="#8b5cf6" strokeWidth="12" strokeDasharray={440} strokeDashoffset={440 - (440 * (predictionData[2].safety / 100))} strokeLinecap="round" className="transition-all duration-1000" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                         <span className="text-4xl font-mono font-bold text-slate-900 dark:text-white">{Math.round(predictionData[2].safety)}%</span>
+                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Resilience</span>
+                      </div>
+                   </div>
+                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-[200px]">
+                      Predicted ability to cover all standard obligations using immediate cash in 3 months.
+                   </p>
+                </div>
+             </div>
+
+             {/* Forecast Cards */}
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               {predictionData.map((month, idx) => (
+                 <div key={idx} className="bento-card rounded-2xl p-6 border-t-4 border-indigo-500/50">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{idx === 0 ? 'Month 1' : idx === 1 ? 'Month 2' : 'Quarter Target'}</div>
+                    <div className="text-xl font-bold dark:text-white text-slate-900 mb-1">{month.name} Forecast</div>
+                    <div className="text-2xl font-mono font-bold text-indigo-600 dark:text-indigo-400">₱{month.balance.toLocaleString()}</div>
+                    <div className="mt-4 flex items-center space-x-2">
+                       <div className="flex-grow h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500" style={{width: `${month.safety}%`}}></div>
+                       </div>
+                       <span className="text-[10px] font-bold text-slate-500">{Math.round(month.safety)}%</span>
+                    </div>
+                 </div>
+               ))}
+             </div>
+
+             {/* AI Strategic Analysis */}
+             <div className="bento-card rounded-3xl p-8 dark:bg-indigo-950/20 bg-indigo-50/50 relative overflow-hidden group">
+                <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-indigo-500/10 blur-3xl rounded-full"></div>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-6 flex items-center">
+                   <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                   Predictive AI Strategic Analysis
+                </h3>
+                <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                  {isLoadingInsight ? (
+                    <div className="space-y-4">
+                       <div className="h-3 bg-slate-300 dark:bg-slate-700 rounded-full w-full animate-pulse"></div>
+                       <div className="h-3 bg-slate-300 dark:bg-slate-700 rounded-full w-5/6 animate-pulse"></div>
+                       <div className="h-3 bg-slate-300 dark:bg-slate-700 rounded-full w-4/6 animate-pulse"></div>
+                    </div>
+                  ) : (
+                    <div className="prose dark:prose-invert prose-slate max-w-none">
+                      {aiInsight || "Analyzing trajectories..."}
+                    </div>
+                  )}
+                </div>
+             </div>
+          </section>
+        )}
+
         {activeTab === 'assets' && (
           <div key="assets" className="space-y-6 animate-in">
             <div className="flex items-center space-x-3 px-2"><div className="w-1.5 h-5 bg-emerald-500 rounded-full"></div><h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Core Assets & Liquidity</h3></div>
@@ -307,6 +377,7 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
         {activeTab === 'obligations' && (
           <div key="obligations" className="space-y-6 animate-in">
             <div className="flex items-center space-x-3 px-2"><div className="w-1.5 h-5 bg-rose-500 rounded-full"></div><h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Ongoing Obligations</h3></div>
@@ -315,13 +386,11 @@ const App: React.FC = () => {
               <FinancialCard title="Mandatory" totalLabel="Due" entries={data.mandatories} accentColor="border-slate-400" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={(id, l, a) => updateEntry('mandatories', id, l, a)} />
               <FinancialCard title="Utilities" totalLabel="Billed" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={(id, l, a) => updateEntry('utilities', id, l, a)} />
               <FinancialCard title="Subs & Recur" totalLabel="Month" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={(id, l, a) => updateEntry('subscriptions', id, l, a)} />
-              <FinancialCard title="Goal Allocations" totalLabel="Target" entries={data.savingsContribution} accentColor="border-teal-500" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={(id, l, a) => updateEntry('savingsContribution', id, l, a)} />
-              <FinancialCard title="Security Plans" totalLabel="Premium" entries={data.plans} accentColor="border-violet-600" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={(id, l, a) => updateEntry('plans', id, l, a)} />
-              <div className="md:col-span-2"><FinancialCard title="Miscellaneous" totalLabel="Estimate" entries={data.otherExpenses} accentColor="border-zinc-500" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={(id, l, a) => updateEntry('otherExpenses', id, l, a)} /></div>
             </div>
           </div>
         )}
       </main>
+
       <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl px-4">
         <div className="dark:bg-slate-900/90 bg-white/90 backdrop-blur-2xl border dark:border-slate-700/50 border-slate-200/60 p-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between gap-4 ring-1 ring-white/5 transition-all">
           <div className="flex flex-col items-center flex-1 min-w-0"><span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Net Flow</span><span className={`font-mono text-sm sm:text-base font-bold truncate ${stats.remainingBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>₱{stats.remainingBalance.toLocaleString()}</span></div>
