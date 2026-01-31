@@ -13,6 +13,9 @@ interface FinancialCardProps {
   accentColor?: string;
   hasStatus?: boolean;
   isDebt?: boolean;
+  customTotal?: number;
+  secondaryTotal?: number;
+  secondaryTotalLabel?: string;
 }
 
 const FinancialCard: React.FC<FinancialCardProps> = ({
@@ -25,7 +28,10 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
   totalLabel,
   accentColor = "border-slate-300 dark:border-slate-700",
   hasStatus = false,
-  isDebt = false
+  isDebt = false,
+  customTotal,
+  secondaryTotal,
+  secondaryTotalLabel
 }) => {
   const [newLabel, setNewLabel] = useState('');
   const [newAmount, setNewAmount] = useState('');
@@ -113,7 +119,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
     }
   };
 
-  const total = entries.reduce((acc, curr) => acc + curr.amount, 0);
+  const displayTotal = customTotal !== undefined ? customTotal : entries.reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
     <div className={`bento-card rounded-2xl p-5 flex flex-col h-full min-h-[520px] border-l-[6px] ${accentColor}`}>
@@ -124,7 +130,6 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
         </span>
       </div>
       
-      {/* Fixed height area for the list to ensure card uniformity */}
       <div className="flex-grow space-y-3 mb-6 overflow-y-auto h-56 min-h-[14rem] pr-1.5 custom-scrollbar">
         {entries.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full opacity-40">
@@ -319,11 +324,21 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
           </div>
         </form>
         
-        <div className="flex justify-between items-center pt-3 border-t-2 border-slate-200 dark:border-slate-800/60 transition-colors">
-          <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.2em]">{totalLabel}</span>
-          <span className="font-mono text-lg font-bold dark:text-white text-slate-900">
-            ₱{total.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-          </span>
+        <div className="pt-3 border-t-2 border-slate-200 dark:border-slate-800/60 transition-colors space-y-1">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.2em]">{totalLabel}</span>
+            <span className="font-mono text-lg font-bold dark:text-white text-slate-900">
+              ₱{displayTotal.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+            </span>
+          </div>
+          {secondaryTotal !== undefined && (
+            <div className="flex justify-between items-center opacity-60">
+              <span className="text-[9px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.1em]">{secondaryTotalLabel || 'Overall'}</span>
+              <span className="font-mono text-sm font-bold dark:text-white text-slate-900">
+                ₱{secondaryTotal.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
