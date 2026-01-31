@@ -3,9 +3,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FinancialEntry, DashboardData, TransactionStatus } from './types';
 import FinancialCard from './components/FinancialCard';
 import { getFinancialInsights, InsightView } from './services/geminiService';
+import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
-type TabType = 'overview' | 'assets' | 'obligations' | 'prediction';
+type TabType = 'overview' | 'assets' | 'obligations' | 'prediction' | 'forecast';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -72,6 +73,7 @@ const DEFAULT_DATA: DashboardData = {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isAiConnected, setIsAiConnected] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('fintrack-theme');
@@ -107,6 +109,7 @@ const App: React.FC = () => {
     localStorage.setItem('fintrack-theme', theme);
   }, [theme]);
 
+  // Use current aistudio context to determine AI availability
   useEffect(() => {
     const checkConnection = async () => {
       if (window.aistudio) {
@@ -173,12 +176,49 @@ const App: React.FC = () => {
     };
   }, [data]);
 
+  const detailedForecast = useMemo(() => {
+    const now = new Date();
+    const months = [];
+    let currentBalance = stats.liquidCash;
+    const monthlyInflow = stats.unpaidReceivables;
+    const monthlyOutflow = stats.totalMonthlyCommitments;
+
+    for (let i = 0; i < 6; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      const inflow = i === 0 ? monthlyInflow : (stats.unpaidReceivables * 0.5);
+      const outflow = monthlyOutflow;
+      const net = inflow - outflow;
+      currentBalance += net;
+      months.push({ id: i, name: monthName, inflow, outflow, net, balance: currentBalance });
+    }
+    return months;
+  }, [stats]);
+
+  const handleExportPdf = async () => {
+    setIsExporting(true);
+    try {
+      await generateFinancialReport(data, stats, detailedForecast);
+    } catch (error) {
+      console.error("PDF Export Error:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const categoryChartData = useMemo(() => [
     { name: 'Current Cash', amount: stats.liquidCash, avg: stats.liquidCash * 0.95 },
     { name: 'Incoming', amount: stats.unpaidReceivables, avg: stats.unpaidReceivables * 1.1 },
     { name: 'Commitments', amount: stats.unpaidMonthlyCommitments, avg: stats.unpaidMonthlyCommitments * 1.05 },
     { name: 'Vault', amount: stats.vaultSavings, avg: stats.vaultSavings * 0.9 },
   ], [stats]);
+
+  const handleOpenKeySelection = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setIsAiConnected(true);
+    }
+  };
 
   const fetchOverviewInsight = useCallback(async (isRetry = false) => {
     setIsLoadingInsight(true);
@@ -187,10 +227,19 @@ const App: React.FC = () => {
       setOverviewInsight(insight);
       setIsAiConnected(true);
     } catch (e: any) {
-      if ((e.message === "API_KEY_MISSING" || e.message === "MODEL_NOT_FOUND") && !isRetry) {
+      console.error("AI Insight Error:", e);
+      // Handle the case where the API key is invalid or model is missing by prompting for a key
+      if (e.message.includes("Requested entity was not found") || e.message === "API_KEY_MISSING") {
         setIsAiConnected(false);
+        if (window.aistudio) {
+          await window.aistudio.openSelectKey();
+          // After calling openSelectKey, assume successful selection and proceed as per guidelines
+          setIsAiConnected(true);
+          if (!isRetry) fetchOverviewInsight(true);
+        }
+      } else {
+        setOverviewInsight("AI Strategy hub offline. View quantitative breakdown instead.");
       }
-      setOverviewInsight("AI Strategy hub offline. View quantitative breakdown instead.");
     } finally {
       setIsLoadingInsight(false);
     }
@@ -198,7 +247,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'overview' && !overviewInsight) fetchOverviewInsight();
-  }, [activeTab, fetchOverviewInsight]);
+  }, [activeTab, fetchOverviewInsight, overviewInsight]);
 
   const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number) => {
     const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID };
@@ -238,15 +287,16 @@ const App: React.FC = () => {
   }, [stats]);
 
   const TABS: TabConfig[] = [
-    { id: 'overview', label: 'Overview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
-    { id: 'assets', label: 'Assets', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> },
-    { id: 'obligations', label: 'Obligations', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg> },
-    { id: 'prediction', label: 'Prediction', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> }
+    { id: 'overview', label: 'Overview', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
+    { id: 'assets', label: 'Assets', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> },
+    { id: 'obligations', label: 'Obligations', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg> },
+    { id: 'prediction', label: 'Analysis', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> },
+    { id: 'forecast', label: 'Forecast', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> }
   ];
 
   return (
-    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
-      <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-4">
+    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden transition-colors duration-500">
+      <header className="px-6 py-6 md:py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-6 transition-all duration-300">
         <div className="flex items-center justify-between w-full md:w-auto min-w-0">
           <div className="flex items-center space-x-4 min-w-0">
             <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 shrink-0">
@@ -259,23 +309,69 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
+          
+          <div className="md:hidden flex items-center space-x-3">
+             {!isAiConnected && (
+               <button 
+                onClick={handleOpenKeySelection}
+                className="p-3 rounded-xl border border-amber-500/50 text-amber-500 hover:bg-amber-500 hover:text-white transition-all active:scale-95"
+                title="Connect AI Key"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+              </button>
+             )}
+             <button 
+              onClick={handleExportPdf} 
+              disabled={isExporting}
+              className="p-3 rounded-xl border border-indigo-500/50 text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isExporting ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>}
+            </button>
+            <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
+              {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
+            </button>
+          </div>
         </div>
         
-        <nav className="flex flex-nowrap overflow-x-auto no-scrollbar dark:bg-slate-900/60 bg-slate-100/60 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 w-full md:w-auto gap-1">
+        <nav className="flex flex-col md:flex-row dark:bg-slate-900/60 bg-slate-100/60 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 w-full md:w-auto gap-1 transition-all duration-300">
           {TABS.map((tab) => (
             <button 
               key={tab.id} 
               onClick={() => setActiveTab(tab.id)} 
-              className={`flex items-center space-x-2.5 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-200 shrink-0 ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+              className={`flex items-center space-x-3.5 md:space-x-2.5 px-6 md:px-5 py-4 md:py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 w-full md:w-auto ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}
               aria-current={activeTab === tab.id ? 'page' : undefined}
             >
-              <span className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'opacity-60'}`}>{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className={`transition-all duration-300 ${activeTab === tab.id ? 'scale-110' : 'opacity-60'}`}>{tab.icon}</span>
+              <span className="flex-grow md:flex-grow-0 text-left md:text-center">{tab.label}</span>
+              {activeTab === tab.id && (
+                <svg className="w-4 h-4 md:hidden opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
+              )}
             </button>
           ))}
         </nav>
 
         <div className="hidden md:flex items-center space-x-4 shrink-0">
+          {!isAiConnected && (
+            <button 
+              onClick={handleOpenKeySelection}
+              className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-amber-600/20 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest hover:bg-amber-600 hover:text-white transition-all active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+              <span>Connect AI</span>
+            </button>
+          )}
+          <button 
+            onClick={handleExportPdf} 
+            disabled={isExporting}
+            className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isExporting ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            )}
+            <span>{isExporting ? 'Generating...' : 'Export PDF'}</span>
+          </button>
           <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
             {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
           </button>
@@ -285,7 +381,15 @@ const App: React.FC = () => {
       <main className="max-w-[1720px] mx-auto p-4 md:p-8 lg:p-12 space-y-12 pb-32 overflow-x-hidden">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
-            {/* Primary Health Pillars - ENHANCED 3 PILLAR LAYOUT */}
+            {isLoadingInsight && (
+              <div className="md:col-span-12 bg-indigo-500/10 border border-indigo-500/20 rounded-[3rem] p-10 flex items-center justify-center space-x-4">
+                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <span className="text-xs font-black uppercase tracking-[0.3em] text-indigo-500">Strategizing...</span>
+              </div>
+            )}
+            
             <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
               <div className={`bento-card rounded-[3.5rem] p-10 lg:p-14 flex flex-col justify-center min-h-[250px] lg:min-h-[320px] relative border-t-[12px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-2xl shadow-indigo-600/10' : 'border-rose-600 shadow-2xl shadow-rose-600/10'}`}>
                 <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
@@ -342,7 +446,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Visual Analytics */}
             <div className="md:col-span-12 lg:col-span-8 xl:col-span-9 bento-card rounded-[3rem] p-10 lg:p-14 min-h-[550px] flex flex-col">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-12 gap-6">
                 <div className="min-w-0">
@@ -354,51 +457,15 @@ const App: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={categoryChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}}
-                      dy={10}
-                    />
-                    <YAxis 
-                      hide={false}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{fontSize: 10, fontWeight: 600, fill: theme === 'dark' ? '#475569' : '#94a3b8'}}
-                      tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip 
-                      cursor={{fill: theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(226, 232, 240, 0.4)'}}
-                      contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '24px', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
-                      itemStyle={{fontSize: '13px', fontWeight: 'bold'}}
-                      formatter={(value: any) => [`₱${Number(value).toLocaleString()}`]}
-                    />
-                    <Legend 
-                      verticalAlign="top" 
-                      align="right" 
-                      wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                    />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 600, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
+                    <Tooltip cursor={{fill: theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(226, 232, 240, 0.4)'}} contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '24px', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} itemStyle={{fontSize: '13px', fontWeight: 'bold'}} formatter={(value: any) => [`₱${Number(value).toLocaleString()}`]} />
+                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em' }} />
                     <Bar name="Current Amount" dataKey="amount" radius={[16, 16, 0, 0]} barSize={80}>
-                      {categoryChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.9} />
-                      ))}
-                      <LabelList 
-                        dataKey="amount" 
-                        position="top" 
-                        formatter={(val: number) => `₱${(val / 1000).toFixed(1)}k`} 
-                        style={{ fontSize: '10px', fontWeight: 'bold', fill: theme === 'dark' ? '#94a3b8' : '#64748b' }} 
-                      />
+                      {categoryChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.9} />)}
+                      <LabelList dataKey="amount" position="top" formatter={(val: number) => `₱${(val / 1000).toFixed(1)}k`} style={{ fontSize: '10px', fontWeight: 'bold', fill: theme === 'dark' ? '#94a3b8' : '#64748b' }} />
                     </Bar>
-                    <Line 
-                      name="Risk Threshold" 
-                      type="monotone" 
-                      dataKey="avg" 
-                      stroke="#f43f5e" 
-                      strokeWidth={5} 
-                      dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} 
-                      strokeDasharray="10 8" 
-                    />
+                    <Line name="Risk Threshold" type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={5} dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} strokeDasharray="10 8" />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -409,7 +476,6 @@ const App: React.FC = () => {
                 <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Active Liquidity</span>
                 <span className="text-3xl xl:text-4xl font-mono font-bold dark:text-white text-slate-900 break-all">₱{stats.liquidAssets.toLocaleString()}</span>
               </div>
-
               <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-rose-600 shadow-xl shadow-rose-600/5 flex flex-col justify-center">
                 <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block text-rose-500">Debt Matrix</span>
                 <div className="flex flex-col gap-2">
@@ -420,11 +486,84 @@ const App: React.FC = () => {
                    </div>
                 </div>
               </div>
-
               <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-emerald-600 shadow-xl shadow-emerald-500/5 flex flex-col justify-center">
                 <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Vault Balance</span>
                 <span className="text-3xl xl:text-4xl font-mono font-bold text-emerald-500 break-all">₱{stats.vaultSavings.toLocaleString()}</span>
               </div>
+            </div>
+
+            {overviewInsight && (
+              <div className="md:col-span-12 bento-card rounded-[3rem] p-10 lg:p-14 bg-indigo-600 text-white shadow-2xl shadow-indigo-600/30">
+                <div className="flex items-center space-x-3 mb-8">
+                  <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-[0.4em]">AI Strategic Insight</h3>
+                </div>
+                <div className="prose prose-invert max-w-none text-indigo-50/90 font-medium leading-relaxed">
+                  <div className="whitespace-pre-wrap">{overviewInsight}</div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'forecast' && (
+          <section key="forecast" className="space-y-12 animate-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b dark:border-slate-900 border-slate-200 pb-8">
+              <div className="space-y-2">
+                <h2 className="text-xs font-black uppercase tracking-[0.4em] text-indigo-500">Monthly Performance Forecast</h2>
+                <p className="text-2xl font-black dark:text-white text-slate-950">Next 6-Month Trajectory</p>
+              </div>
+              <div className="flex items-center space-x-4">
+                 <div className="flex items-center space-x-2">
+                   <div className="w-3 h-3 rounded bg-emerald-500"></div>
+                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Projected Surplus</span>
+                 </div>
+                 <div className="flex items-center space-x-2">
+                   <div className="w-3 h-3 rounded bg-rose-500"></div>
+                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Operating Loss</span>
+                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {detailedForecast.map((month) => (
+                <div key={month.id} className="bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col relative overflow-hidden group">
+                  <div className={`absolute top-0 right-0 w-40 h-40 blur-[80px] opacity-10 ${month.net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+                  
+                  <div className="flex justify-between items-center mb-10">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">{month.name}</span>
+                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${month.net >= 0 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
+                      {month.net >= 0 ? 'Cash Positive' : 'Cash Burn'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-6 mb-10">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Expected In</span>
+                      <span className="font-mono text-base font-bold text-emerald-500">+₱{month.inflow.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Projected Out</span>
+                      <span className="font-mono text-base font-bold text-rose-500">-₱{month.outflow.toLocaleString()}</span>
+                    </div>
+                    <div className={`flex justify-between items-center pt-4 border-t ${theme === 'dark' ? 'border-slate-800' : 'border-slate-100'}`}>
+                      <span className="text-xs font-black uppercase tracking-widest dark:text-slate-300 text-slate-600">Net Monthly</span>
+                      <span className={`font-mono text-xl font-black ${month.net >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {month.net >= 0 ? '+' : ''}₱{month.net.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={`mt-auto p-6 rounded-2xl ${theme === 'dark' ? 'bg-slate-900/40' : 'bg-slate-100/40'} border ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200/50'}`}>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Projected End Balance</span>
+                    <span className="text-2xl font-mono font-bold dark:text-white text-slate-900 leading-none">
+                      ₱{month.balance.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}
@@ -455,7 +594,6 @@ const App: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
-
                 <div className="lg:col-span-4 flex flex-col gap-8 lg:gap-10">
                    <div className="bento-card rounded-[2.5rem] p-10 dark:bg-slate-900 bg-white border border-slate-200 dark:border-slate-800 flex flex-col">
                       <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-8 truncate">Efficiency</h3>
@@ -480,7 +618,6 @@ const App: React.FC = () => {
                         </div>
                       </div>
                    </div>
-
                    <div className={`bento-card rounded-[2.5rem] p-10 border-l-[12px] ${stats.netMonthlyCashFlow >= 0 ? 'border-emerald-600' : 'border-rose-600'} flex flex-col justify-center`}>
                       <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-6">Velocity</h3>
                       <span className={`text-4xl xl:text-5xl font-mono font-bold ${stats.netMonthlyCashFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'} break-all`}>
@@ -488,21 +625,6 @@ const App: React.FC = () => {
                       </span>
                    </div>
                 </div>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10">
-               {predictionData.slice(1).map((month, idx) => (
-                 <div key={idx} className="bento-card rounded-[3rem] p-10 border-t-[10px] border-indigo-500/50 shadow-2xl shadow-indigo-500/5 transition-all">
-                    <div className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em] mb-6">Milestone: {month.name}</div>
-                    <div className="text-4xl lg:text-5xl font-mono font-bold dark:text-white text-slate-900 mb-8 break-all">₱{month.balance.toLocaleString()}</div>
-                    <div className="flex items-center space-x-4">
-                       <div className="flex-grow h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-indigo-500" style={{width: `${month.safety}%`}}></div>
-                       </div>
-                       <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest whitespace-nowrap">{Math.round(month.safety)}%</span>
-                    </div>
-                 </div>
-               ))}
              </div>
           </section>
         )}

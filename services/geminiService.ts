@@ -4,13 +4,10 @@ import { DashboardData } from "../types";
 
 export type InsightView = 'overview' | 'prediction';
 
+// getFinancialInsights generates analytical text based on user financial data
 export const getFinancialInsights = async (data: DashboardData, view: InsightView = 'overview'): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY_MISSING");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Always use process.env.API_KEY directly when initializing GoogleGenAI
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const overviewPrompt = `
     Analyze this financial state: ${JSON.stringify(data)}
@@ -38,18 +35,16 @@ export const getFinancialInsights = async (data: DashboardData, view: InsightVie
   `;
 
   try {
+    // Generate content using the recommended model for text reasoning
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [{ 
-        parts: [{ 
-          text: view === 'prediction' ? predictionPrompt : overviewPrompt 
-        }] 
-      }],
+      contents: view === 'prediction' ? predictionPrompt : overviewPrompt,
       config: {
         systemInstruction: "You are an elite financial strategist. Your goal is to provide high-signal, low-noise advice. Format your output with clear headers, bullet points, and bold text for scanning."
       }
     });
 
+    // Extract text output directly from the .text property as per SDK documentation
     if (!response.text) {
       return "The strategist analyzed your data but didn't provide a written response. Try adjusting your entries.";
     }
@@ -59,8 +54,9 @@ export const getFinancialInsights = async (data: DashboardData, view: InsightVie
     console.error("Gemini Service Error:", error);
     
     const errorMessage = error?.message || "";
+    // If Requested entity was not found, propagate the error for UI handling
     if (errorMessage.includes("Requested entity was not found")) {
-      throw new Error("MODEL_NOT_FOUND");
+      throw new Error("Requested entity was not found");
     }
     
     return `AI Analysis paused: ${errorMessage || "Unknown connection error"}`;
