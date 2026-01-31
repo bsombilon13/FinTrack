@@ -123,15 +123,11 @@ const App: React.FC = () => {
 
   // UNIFIED COMPUTATION ENGINE
   const stats = useMemo(() => {
-    // Current Pools
     const liquidCash = calculateTotal(data.accountBalances);
     const vaultSavings = calculateTotal(data.savingsAccounts);
-    
-    // Revenue Matrix
     const totalReceivables = calculateTotal(data.receivables);
     const unpaidReceivables = data.receivables.filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
 
-    // Category Level Aggregates (Used for overall sums)
     const categoryTotals = {
       loans: calculateTotal(data.loans),
       utilities: calculateTotal(data.utilities),
@@ -142,30 +138,20 @@ const App: React.FC = () => {
       savings: calculateTotal(data.savingsContribution),
     };
 
-    // Monthly Commitment Flow
     const commitmentCategories = [
       data.loans, data.utilities, data.subscriptions, 
       data.mandatories, data.plans, data.otherExpenses, data.savingsContribution
     ];
     
-    // Total requirement for the month (regardless of status)
     const totalMonthlyCommitments = Object.values(categoryTotals).reduce((acc, val) => acc + val, 0);
-    
-    // Unpaid Commitments (What is actually left to pay this month)
     const unpaidMonthlyCommitments = commitmentCategories.flat().filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
-
-    // Debt Matrix Logic (Long term balance)
     const totalDebtBalanceValue = data.loans.reduce((acc, e) => acc + (e.totalAmount !== undefined ? e.totalAmount : e.amount), 0);
 
-    // Refined Dynamic Calculations
-    // Formula refined: Deployable = (Current Cash + Remaining Incoming) - Remaining Obligations
     const deployableFunds = (liquidCash + unpaidReceivables) - unpaidMonthlyCommitments;
-    
     const liquidAssets = liquidCash + unpaidReceivables;
     const netMonthlyCashFlow = (liquidCash + totalReceivables) - totalMonthlyCommitments;
     const resilienceIndex = totalMonthlyCommitments > 0 ? (liquidCash / totalMonthlyCommitments) : 0;
     
-    // Performance Ratios
     const savingsAllocation = calculateTotal(data.savingsContribution);
     const savingsRate = liquidAssets > 0 ? (savingsAllocation / liquidAssets) * 100 : 0;
 
@@ -261,15 +247,15 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
       <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-4">
-        <div className="flex items-center justify-between w-full md:w-auto">
-          <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between w-full md:w-auto min-w-0">
+          <div className="flex items-center space-x-4 min-w-0">
             <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 shrink-0">
               <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight dark:text-white text-slate-900 leading-none">FinTrack Pro</h1>
+            <div className="min-w-0 truncate">
+              <h1 className="text-2xl font-black tracking-tight dark:text-white text-slate-900 leading-none truncate">FinTrack Pro</h1>
               <div className="flex items-center mt-2 space-x-2">
-                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] leading-none">Intelligence Suite</span>
+                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] leading-none truncate">Intelligence Suite</span>
               </div>
             </div>
           </div>
@@ -289,126 +275,121 @@ const App: React.FC = () => {
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center space-x-4">
+        <div className="hidden md:flex items-center space-x-4 shrink-0">
           <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
-            {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95l16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
+            {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
           </button>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto p-4 md:p-10 space-y-12 pb-32">
+      <main className="max-w-[1720px] mx-auto p-4 md:p-8 lg:p-12 space-y-12 pb-32 overflow-x-hidden">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
             {/* Health Pillars */}
             <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
-              <div className={`bento-card rounded-[2.5rem] p-8 lg:p-10 flex flex-col justify-center min-h-[200px] lg:min-h-[240px] relative overflow-hidden border-t-8 transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-indigo-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
-                <div className={`absolute top-0 right-0 w-48 h-48 blur-[80px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Deployable Funds</span>
+              <div className={`bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-indigo-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
+                <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
+                <div className="flex items-center mb-8">
+                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Deployable Funds</span>
                   <InfoTooltip formula="(Current Cash + Unpaid Revenue) - Unpaid Commitments. Your actual spending capacity." />
                 </div>
-                <div className="flex items-baseline space-x-3 overflow-hidden">
-                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter truncate ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-900' : 'text-rose-600'}`}>
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className={`text-4xl sm:text-5xl lg:text-7xl font-mono font-bold tracking-tight leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-900' : 'text-rose-600'}`}>
                     ₱{stats.deployableFunds.toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <div className="bento-card rounded-[2.5rem] p-8 lg:p-10 flex flex-col justify-center min-h-[200px] lg:min-h-[240px] relative overflow-hidden border-t-8 border-slate-400">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-slate-400 opacity-10 blur-[80px]"></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Remaining Debts</span>
+              <div className="bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] border-slate-400">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-slate-400 opacity-10 blur-[100px]"></div>
+                <div className="flex items-center mb-8">
+                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Remaining Debts</span>
                   <InfoTooltip formula="Sum of all UNPAID Monthly Commitments." />
                 </div>
-                <div className="flex items-baseline space-x-3 overflow-hidden">
-                  <span className="text-4xl sm:text-5xl lg:text-6xl font-mono font-bold dark:text-white text-slate-900 tracking-tighter truncate">
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className="text-4xl sm:text-5xl lg:text-7xl font-mono font-bold dark:text-white text-slate-900 tracking-tight leading-none">
                     ₱{stats.unpaidMonthlyCommitments.toLocaleString()}
                   </span>
-                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest block shrink-0">Unpaid</span>
                 </div>
               </div>
 
-              <div className={`bento-card rounded-[2.5rem] p-8 lg:p-10 flex flex-col justify-center min-h-[200px] lg:min-h-[240px] relative overflow-hidden border-t-8 ${stats.resilienceIndex >= 1 ? 'border-emerald-600 shadow-emerald-500/10' : 'border-amber-500 shadow-amber-500/10'}`}>
-                <div className={`absolute top-0 right-0 w-48 h-48 blur-[80px] opacity-20 ${stats.resilienceIndex >= 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Resilience Score</span>
+              <div className={`bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] ${stats.resilienceIndex >= 1 ? 'border-emerald-600 shadow-emerald-500/10' : 'border-amber-500 shadow-amber-500/10'}`}>
+                <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.resilienceIndex >= 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                <div className="flex items-center mb-8">
+                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Resilience Score</span>
                   <InfoTooltip formula="Current Cash / Total Requirement. Measures months of runway against all obligations." />
                 </div>
-                <div className="flex items-baseline space-x-3 overflow-hidden">
-                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter truncate ${stats.resilienceIndex >= 1 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className={`text-4xl sm:text-5xl lg:text-7xl font-mono font-bold tracking-tight leading-none ${stats.resilienceIndex >= 1 ? 'text-emerald-600' : 'text-amber-500'}`}>
                     {stats.resilienceIndex.toFixed(1)}
                   </span>
-                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest shrink-0">Runway</span>
                 </div>
               </div>
             </div>
 
             {/* Visual Analytics */}
-            <div className="md:col-span-12 lg:col-span-8 xl:col-span-9 bento-card rounded-[2.5rem] p-8 lg:p-10 min-h-[500px] flex flex-col">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4">
-                <div>
-                  <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">Unpaid Benchmarks</h2>
-                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-2">Current Obligations vs Available Assets</p>
+            <div className="md:col-span-12 lg:col-span-8 xl:col-span-9 bento-card rounded-[3rem] p-10 lg:p-14 min-h-[550px] flex flex-col">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-12 gap-6">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Capital Benchmarks</h2>
+                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-2 tracking-widest truncate">Immediate Obligations vs Available Assets</p>
                 </div>
               </div>
               <div className="flex-grow w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={categoryChartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 800, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} />
                     <YAxis hide />
                     <Tooltip 
                       cursor={{fill: theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(226, 232, 240, 0.4)'}}
-                      contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '16px', padding: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}
-                      itemStyle={{fontSize: '12px', fontWeight: 'bold'}}
+                      contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '24px', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+                      itemStyle={{fontSize: '13px', fontWeight: 'bold'}}
                       formatter={(value: any) => [`₱${Number(value).toLocaleString()}`]}
                     />
-                    <Bar dataKey="amount" radius={[12, 12, 0, 0]} barSize={64}>
+                    <Bar dataKey="amount" radius={[16, 16, 0, 0]} barSize={80}>
                       {categoryChartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.9} />
                       ))}
                     </Bar>
-                    <Line type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={4} dot={{ r: 6, fill: '#f43f5e', strokeWidth: 3, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} strokeDasharray="8 6" />
+                    <Line type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={5} dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} strokeDasharray="10 8" />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="md:col-span-12 lg:col-span-4 xl:col-span-3 flex flex-col gap-6 lg:gap-8">
-              <div className="bento-card rounded-[2rem] p-8 border-l-8 border-indigo-600 shadow-xl shadow-indigo-600/5 transition-all hover:scale-[1.02]">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em] mb-4 block">Active Liquidity</span>
-                <span className="text-3xl font-mono font-bold dark:text-white text-slate-900 break-words">₱{stats.liquidAssets.toLocaleString()}</span>
-                <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">Cash + Unpaid Revenue</p>
+            <div className="md:col-span-12 lg:col-span-4 xl:col-span-3 flex flex-col gap-6 lg:gap-10">
+              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-indigo-600 shadow-xl shadow-indigo-600/5 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Active Liquidity</span>
+                <span className="text-3xl xl:text-4xl font-mono font-bold dark:text-white text-slate-900 break-all">₱{stats.liquidAssets.toLocaleString()}</span>
               </div>
 
-              <div className="bento-card rounded-[2rem] p-8 border-l-8 border-rose-600 shadow-xl shadow-rose-600/5 transition-all hover:scale-[1.02]">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em] mb-2 block text-rose-500">Debt Matrix</span>
-                <div className="flex justify-between items-baseline mb-2">
-                   <span className="text-3xl font-mono font-bold dark:text-white text-slate-900 break-words">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
-                   <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">Balance</span>
-                </div>
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-baseline">
-                   <span className="text-xl font-mono font-bold text-rose-500">₱{stats.unpaidMonthlyCommitments.toLocaleString()}</span>
-                   <span className="text-[10px] font-black text-rose-400 uppercase shrink-0">Unpaid</span>
+              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-rose-600 shadow-xl shadow-rose-600/5 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block text-rose-500">Debt Matrix</span>
+                <div className="flex flex-col gap-2">
+                   <span className="text-3xl xl:text-4xl font-mono font-bold dark:text-white text-slate-900 break-all">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
+                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                      <span className="text-xl font-mono font-bold text-rose-500 shrink-0 mr-2">₱{stats.unpaidMonthlyCommitments.toLocaleString()}</span>
+                      <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest shrink-0">Due</span>
+                   </div>
                 </div>
               </div>
 
-              <div className="bento-card rounded-[2rem] p-8 border-l-8 border-emerald-600 shadow-xl shadow-emerald-500/5 transition-all hover:scale-[1.02]">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em] mb-4 block">Vault Balance</span>
-                <span className="text-3xl font-mono font-bold text-emerald-500 break-words">₱{stats.vaultSavings.toLocaleString()}</span>
-                <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">Untouchable capital</p>
+              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-emerald-600 shadow-xl shadow-emerald-500/5 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Vault Balance</span>
+                <span className="text-3xl xl:text-4xl font-mono font-bold text-emerald-500 break-all">₱{stats.vaultSavings.toLocaleString()}</span>
               </div>
             </div>
           </section>
         )}
 
         {activeTab === 'prediction' && (
-          <section key="prediction" className="space-y-10 animate-in">
+          <section key="prediction" className="space-y-10 animate-in overflow-x-hidden">
              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-8 bento-card rounded-[2rem] p-10 min-h-[500px] flex flex-col">
-                  <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">90-Day Accumulation Path</h2>
-                    <span className="text-[10px] font-mono font-bold px-3 py-1 bg-indigo-500/10 text-indigo-500 rounded-full">QUANTITATIVE MODEL</span>
+                <div className="lg:col-span-8 bento-card rounded-[2.5rem] p-10 lg:p-14 min-h-[550px] flex flex-col">
+                  <div className="flex justify-between items-center mb-10">
+                    <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400 truncate">90-Day Path</h2>
+                    <span className="text-[10px] font-mono font-bold px-4 py-1.5 bg-indigo-500/10 text-indigo-500 rounded-full shrink-0 border border-indigo-500/20 uppercase tracking-widest ml-2">Prediction</span>
                   </div>
                   <div className="flex-grow w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -419,65 +400,61 @@ const App: React.FC = () => {
                             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
+                        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 800, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} />
-                        <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: '16px' }} formatter={(val: any) => [`₱${Number(val).toLocaleString()}`, 'Projected Reserves']}/>
-                        <Area type="monotone" dataKey="balance" stroke="#8b5cf6" strokeWidth={4} fill="url(#colorForecast)" />
-                        <Line type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={2} dot={{r: 4, fill: '#6366f1'}} />
+                        <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: '24px' }} formatter={(val: any) => [`₱${Number(val).toLocaleString()}`, 'Balance']}/>
+                        <Area type="monotone" dataKey="balance" stroke="#8b5cf6" strokeWidth={5} fill="url(#colorForecast)" />
+                        <Line type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} dot={{r: 6, fill: '#6366f1', strokeWidth: 3, stroke: theme === 'dark' ? '#0f172a' : '#fff'}} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="lg:col-span-4 flex flex-col gap-8">
-                   <div className="bento-card rounded-[2rem] p-8 dark:bg-slate-900 bg-white border border-slate-200 dark:border-slate-800 flex flex-col">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6">Efficiency Ratios</h3>
-                      <div className="space-y-6">
+                <div className="lg:col-span-4 flex flex-col gap-8 lg:gap-10">
+                   <div className="bento-card rounded-[2.5rem] p-10 dark:bg-slate-900 bg-white border border-slate-200 dark:border-slate-800 flex flex-col">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-8 truncate">Efficiency</h3>
+                      <div className="space-y-8">
                         <div>
-                          <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-widest">
-                            <span>Savings Allocation</span>
-                            <span className="text-emerald-500">{stats.savingsRate.toFixed(1)}%</span>
+                          <div className="flex justify-between text-xs font-bold mb-3 uppercase tracking-[0.2em] truncate">
+                            <span>Savings</span>
+                            <span className="text-emerald-500 ml-2">{stats.savingsRate.toFixed(1)}%</span>
                           </div>
-                          <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 transition-all duration-1000" style={{width: `${Math.min(100, stats.savingsRate)}%`}}></div>
+                          <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 transition-all duration-1000 ease-out" style={{width: `${Math.min(100, stats.savingsRate)}%`}}></div>
                           </div>
                         </div>
                         <div>
-                          <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-widest">
-                            <span>Liability Ratio</span>
-                            <span className="text-indigo-500">{stats.liquidAssets > 0 ? ((stats.totalMonthlyCommitments / stats.liquidAssets) * 100).toFixed(1) : 0}%</span>
+                          <div className="flex justify-between text-xs font-bold mb-3 uppercase tracking-[0.2em] truncate">
+                            <span>Liability</span>
+                            <span className="text-indigo-500 ml-2">{stats.liquidAssets > 0 ? ((stats.totalMonthlyCommitments / stats.liquidAssets) * 100).toFixed(1) : 0}%</span>
                           </div>
-                          <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500 transition-all duration-1000" style={{width: `${Math.min(100, stats.liquidAssets > 0 ? (stats.totalMonthlyCommitments / stats.liquidAssets) * 100 : 0)}%`}}></div>
+                          <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{width: `${Math.min(100, stats.liquidAssets > 0 ? (stats.totalMonthlyCommitments / stats.liquidAssets) * 100 : 0)}%`}}></div>
                           </div>
                         </div>
                       </div>
                    </div>
 
-                   <div className={`bento-card rounded-[2rem] p-8 border-l-8 ${stats.netMonthlyCashFlow >= 0 ? 'border-emerald-600' : 'border-rose-600'} flex flex-col`}>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-4">Monthly Velocity</h3>
-                      <span className={`text-4xl font-mono font-bold ${stats.netMonthlyCashFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                   <div className={`bento-card rounded-[2.5rem] p-10 border-l-[12px] ${stats.netMonthlyCashFlow >= 0 ? 'border-emerald-600' : 'border-rose-600'} flex flex-col justify-center`}>
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-6">Velocity</h3>
+                      <span className={`text-4xl xl:text-5xl font-mono font-bold ${stats.netMonthlyCashFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'} break-all`}>
                         ₱{stats.netMonthlyCashFlow.toLocaleString()}
                       </span>
-                      <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-widest">
-                        {stats.netMonthlyCashFlow >= 0 ? "Accumulating Wealth" : "Net Cash Drain"}
-                      </p>
                    </div>
                 </div>
              </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10">
                {predictionData.slice(1).map((month, idx) => (
-                 <div key={idx} className="bento-card rounded-[2.5rem] p-10 border-t-8 border-indigo-500/50 shadow-2xl shadow-indigo-500/5">
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4">Milestone: {month.name}</div>
-                    <div className="text-4xl font-mono font-bold dark:text-white text-slate-900 mb-6">₱{month.balance.toLocaleString()}</div>
-                    <div className="flex items-center space-x-3">
+                 <div key={idx} className="bento-card rounded-[3rem] p-10 border-t-[10px] border-indigo-500/50 shadow-2xl shadow-indigo-500/5 transition-all">
+                    <div className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em] mb-6">Milestone: {month.name}</div>
+                    <div className="text-4xl lg:text-5xl font-mono font-bold dark:text-white text-slate-900 mb-8 break-all">₱{month.balance.toLocaleString()}</div>
+                    <div className="flex items-center space-x-4">
                        <div className="flex-grow h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div className="h-full bg-indigo-500" style={{width: `${month.safety}%`}}></div>
                        </div>
-                       <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest">{Math.round(month.safety)}% Coverage</span>
+                       <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest whitespace-nowrap">{Math.round(month.safety)}%</span>
                     </div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4">Projected Surplus vs Commitments</p>
                  </div>
                ))}
              </div>
@@ -485,14 +462,14 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'assets' && (
-          <div key="assets" className="space-y-8 animate-in">
+          <div key="assets" className="space-y-8 animate-in overflow-x-hidden">
             <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-emerald-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Capital Pools</h3></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 overflow-x-hidden">
               <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
-              <FinancialCard title="Vault Savings" totalLabel="Total Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
+              <FinancialCard title="Vault Savings" totalLabel="Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
               <FinancialCard 
-                title="Expected Revenue" 
-                totalLabel="Unpaid Sum" 
+                title="Revenue" 
+                totalLabel="Unpaid" 
                 entries={data.receivables} 
                 accentColor="border-amber-500" 
                 hasStatus 
@@ -502,23 +479,23 @@ const App: React.FC = () => {
                 onUpdateEntry={updateEntry}
                 customTotal={stats.unpaidReceivables}
                 secondaryTotal={stats.totalReceivables}
-                secondaryTotalLabel="Overall Total"
+                secondaryTotalLabel="Overall"
               />
             </div>
           </div>
         )}
 
         {activeTab === 'obligations' && (
-          <div key="obligations" className="space-y-8 animate-in">
+          <div key="obligations" className="space-y-8 animate-in overflow-x-hidden">
             <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-rose-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Monthly Commitments</h3></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              <FinancialCard title="Loans & Debt" totalLabel="Unpaid Due" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Utilities" totalLabel="Unpaid Due" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Mandatory Costs" totalLabel="Unpaid Due" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Subscriptions" totalLabel="Unpaid Due" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Strategic Plans" totalLabel="Unpaid Due" entries={data.plans} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Savings Goals" totalLabel="Unpaid Due" entries={data.savingsContribution} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} secondaryTotalLabel="Monthly Total" />
-              <FinancialCard title="Other Expenses" totalLabel="Unpaid Due" entries={data.otherExpenses} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} secondaryTotalLabel="Monthly Total" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8 overflow-x-hidden">
+              <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} secondaryTotalLabel="Overall" />
+              <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} secondaryTotalLabel="Overall" />
             </div>
           </div>
         )}

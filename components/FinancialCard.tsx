@@ -119,21 +119,20 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
     }
   };
 
-  // Logic: If card has status, primary total only sums UNPAID items. Otherwise sums all.
   const displayTotal = customTotal !== undefined ? customTotal : entries
     .filter(e => !hasStatus || e.status !== TransactionStatus.PAID)
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
-    <div className={`bento-card rounded-2xl p-5 flex flex-col h-full min-h-[520px] border-l-[6px] ${accentColor}`}>
-      <div className="flex justify-between items-center mb-5 shrink-0">
-        <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">{title}</h3>
-        <span className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-800/60 px-2.5 py-1 rounded-full">
-          {entries.length} {entries.length === 1 ? 'item' : 'items'}
+    <div className={`bento-card rounded-2xl p-5 flex flex-col h-full min-h-[520px] border-l-[6px] ${accentColor} overflow-x-hidden w-full`}>
+      <div className="flex justify-between items-center mb-5 shrink-0 min-w-0">
+        <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400 truncate mr-2">{title}</h3>
+        <span className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-800/60 px-2.5 py-1 rounded-full shrink-0">
+          {entries.length}
         </span>
       </div>
       
-      <div className="flex-grow space-y-3 mb-6 overflow-y-auto h-56 min-h-[14rem] pr-1.5 custom-scrollbar">
+      <div className="flex-grow space-y-3 mb-6 overflow-y-auto overflow-x-hidden h-56 min-h-[14rem] pr-1.5 custom-scrollbar">
         {entries.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full opacity-40">
             <svg className="w-8 h-8 mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0l-8 8-8-8"></path></svg>
@@ -143,14 +142,14 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
         {entries.map((entry) => (
           <div 
             key={entry.id} 
-            className={`flex items-center justify-between group border-b border-slate-200/50 dark:border-slate-800/40 pb-3 last:border-0 min-h-[52px] transition-all duration-300 rounded-xl px-2 -mx-2 ${
+            className={`flex items-center justify-between group border-b border-slate-200/50 dark:border-slate-800/40 pb-3 last:border-0 min-h-[52px] transition-all duration-300 rounded-xl px-2 -mx-2 min-w-0 ${
               editingId === entry.id ? 'bg-indigo-50/70 dark:bg-indigo-900/15 ring-2 ring-indigo-500/30' : 
               justSavedId === entry.id ? 'bg-emerald-50/70 dark:bg-emerald-900/15 ring-2 ring-emerald-500/40' : 'hover:bg-slate-50 dark:hover:bg-slate-800/20'
             }`}
           >
             {editingId === entry.id ? (
-              <div className="flex flex-col flex-1 space-y-3 mr-2 animate-in py-1">
-                <div className="relative">
+              <div className="flex flex-col flex-1 space-y-3 mr-2 animate-in py-1 min-w-0">
+                <div className="relative min-w-0">
                   <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">Label</label>
                   <input 
                     type="text" 
@@ -161,9 +160,9 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     autoFocus
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 min-w-0">
                   {isDebt && (
-                    <div className="relative">
+                    <div className="relative min-w-0">
                       <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">Total</label>
                       <input 
                         type="number" 
@@ -175,7 +174,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                       />
                     </div>
                   )}
-                  <div className="relative flex-grow">
+                  <div className="relative flex-grow min-w-0">
                     <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">{isDebt ? 'Monthly' : 'Amount'}</label>
                     <input 
                       type="number" 
@@ -188,16 +187,16 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     />
                   </div>
                 </div>
-                <div className="flex justify-end space-x-2">
+                <div className="flex justify-end space-x-2 shrink-0">
                    <button 
                     onClick={() => saveEdit(entry.id)} 
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg shadow-lg shadow-emerald-500/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg shadow-lg shadow-emerald-500/20 transition-all text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
                   >
                     Save
                   </button>
                   <button 
                     onClick={cancelEditing} 
-                    className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-lg transition-all hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] font-bold uppercase tracking-widest"
+                    className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-lg transition-all hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
                   >
                     Cancel
                   </button>
@@ -206,18 +205,18 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
             ) : (
               <>
                 <div 
-                  className={`flex flex-col cursor-pointer transition-all flex-grow pr-2 ${confirmingDeleteId === entry.id || confirmingStatusId === entry.id ? 'opacity-30 blur-[2px]' : 'opacity-100'}`} 
+                  className={`flex flex-col cursor-pointer transition-all flex-grow pr-2 min-w-0 ${confirmingDeleteId === entry.id || confirmingStatusId === entry.id ? 'opacity-30 blur-[2px]' : 'opacity-100'}`} 
                   onClick={() => startEditing(entry)}
                 >
-                  <div className="flex items-center">
-                    <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">{entry.label}</span>
+                  <div className="flex items-center min-w-0">
+                    <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1 min-w-0 truncate">{entry.label}</span>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 min-w-0">
                     {isDebt && entry.totalAmount !== undefined && (
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Total: ₱{entry.totalAmount.toLocaleString()}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter shrink-0">T: ₱{entry.totalAmount.toLocaleString()}</span>
                     )}
                     {hasStatus && (
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                      <span className={`text-[10px] font-bold uppercase tracking-widest truncate ${
                         entry.status === TransactionStatus.PAID ? 'text-emerald-600 dark:text-emerald-400' : 
                         entry.status === TransactionStatus.PENDING ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
                       }`}>
@@ -227,23 +226,22 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3 shrink-0">
-                  <div className="flex flex-col items-end">
+                <div className="flex items-center space-x-2 shrink-0 ml-1">
+                  <div className="flex flex-col items-end min-w-0">
                     <span className={`font-mono text-sm font-bold transition-all ${confirmingDeleteId === entry.id || confirmingStatusId === entry.id ? 'opacity-30 blur-[2px]' : 'opacity-100'} ${justSavedId === entry.id ? 'text-emerald-500' : 'dark:text-slate-100 text-slate-900'}`}>
                       ₱{entry.amount.toLocaleString()}
                     </span>
-                    {isDebt && <span className="text-[9px] text-slate-400 font-bold uppercase">Monthly</span>}
                   </div>
                   
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1 shrink-0">
                     {hasStatus && onUpdateStatus && (
-                      <div className="flex items-center">
+                      <div className="flex items-center shrink-0">
                         {confirmingStatusId === entry.id ? (
                           <div className="flex items-center bg-emerald-100 dark:bg-emerald-900/30 rounded-lg px-1 py-0.5 border border-emerald-500/30">
-                            <button onClick={() => handleStatusClick(entry)} className="p-1 text-emerald-600 dark:text-emerald-400 hover:scale-110">
+                            <button onClick={() => handleStatusClick(entry)} className="p-1 text-emerald-600 dark:text-emerald-400">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                             </button>
-                            <button onClick={resetConfirmations} className="p-1 text-slate-500 hover:text-slate-700">
+                            <button onClick={resetConfirmations} className="p-1 text-slate-500">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                           </div>
@@ -259,13 +257,13 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                       </div>
                     )}
 
-                    <div className="flex items-center">
+                    <div className="flex items-center shrink-0">
                       {confirmingDeleteId === entry.id ? (
                         <div className="flex items-center bg-rose-100 dark:bg-rose-900/30 rounded-lg px-1 py-0.5 border border-rose-500/30">
                           <button onClick={() => handleDeleteClick(entry.id)} className="p-1 text-rose-600 dark:text-rose-400 font-bold text-[9px] uppercase">
                             Del
                           </button>
-                          <button onClick={resetConfirmations} className="p-1 text-slate-500 hover:text-slate-700">
+                          <button onClick={resetConfirmations} className="p-1 text-slate-500">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                           </button>
                         </div>
@@ -287,57 +285,57 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
         ))}
       </div>
 
-      <div className="mt-auto space-y-4 shrink-0">
-        <form onSubmit={handleAdd} className="flex flex-col space-y-2 p-2.5 bg-slate-50/50 dark:bg-slate-900/20 rounded-xl border border-slate-200/50 dark:border-slate-800/40">
+      <div className="mt-auto space-y-4 shrink-0 min-w-0">
+        <form onSubmit={handleAdd} className="flex flex-col space-y-2 p-2.5 bg-slate-50/50 dark:bg-slate-900/20 rounded-xl border border-slate-200/50 dark:border-slate-800/40 min-w-0">
           <input 
             type="text" 
-            placeholder="Description..." 
+            placeholder="Label..." 
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-medium dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-medium dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
             required
           />
-          <div className="flex flex-col space-y-2">
+          <div className="flex flex-col space-y-2 min-w-0">
             {isDebt && (
               <input 
                 type="number" 
-                placeholder="Total Debt" 
+                placeholder="Overall Total" 
                 value={newTotalAmount}
                 onChange={(e) => setNewTotalAmount(e.target.value)}
-                className="flex-grow bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
                 min="0"
                 step="any"
               />
             )}
-            <div className="flex space-x-2">
+            <div className="flex space-x-2 min-w-0">
               <input 
                 type="number" 
-                placeholder={isDebt ? "Monthly Pay" : "Amount"} 
+                placeholder={isDebt ? "Monthly" : "Amount"} 
                 value={newAmount}
                 onChange={(e) => setNewAmount(e.target.value)}
-                className="flex-grow bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                className="flex-grow min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
                 min="0"
                 step="any"
                 required
               />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition-all shadow-md shadow-indigo-600/20 flex-shrink-0 active:scale-95 font-bold text-xxs uppercase tracking-widest">
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition-all shadow-md shadow-indigo-600/20 shrink-0 active:scale-95 font-bold text-xxs uppercase tracking-widest">
                 Add
               </button>
             </div>
           </div>
         </form>
         
-        <div className="pt-3 border-t-2 border-slate-200 dark:border-slate-800/60 transition-colors space-y-1">
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.2em]">{totalLabel}</span>
-            <span className="font-mono text-lg font-bold dark:text-white text-slate-900">
+        <div className="pt-3 border-t-2 border-slate-200 dark:border-slate-800/60 transition-colors space-y-1 min-w-0">
+          <div className="flex justify-between items-center min-w-0">
+            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.2em] truncate mr-2">{totalLabel}</span>
+            <span className="font-mono text-lg font-bold dark:text-white text-slate-900 shrink-0">
               ₱{displayTotal.toLocaleString(undefined, { minimumFractionDigits: 0 })}
             </span>
           </div>
           {secondaryTotal !== undefined && (
-            <div className="flex justify-between items-center opacity-60">
-              <span className="text-[9px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.1em]">{secondaryTotalLabel || 'Overall'}</span>
-              <span className="font-mono text-sm font-bold dark:text-white text-slate-900">
+            <div className="flex justify-between items-center opacity-60 min-w-0">
+              <span className="text-[9px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-[0.1em] truncate mr-2">{secondaryTotalLabel || 'Overall'}</span>
+              <span className="font-mono text-sm font-bold dark:text-white text-slate-900 shrink-0">
                 ₱{secondaryTotal.toLocaleString(undefined, { minimumFractionDigits: 0 })}
               </span>
             </div>
