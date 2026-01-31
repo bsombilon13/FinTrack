@@ -46,9 +46,6 @@ const DEFAULT_DATA: DashboardData = {
   loans: [
     { id: '7', label: 'Credit Card (Main)', amount: 1200, totalAmount: 12000, status: TransactionStatus.UNPAID },
   ],
-  payables: [
-    { id: 'p1', label: 'Supplier A', amount: 3500, status: TransactionStatus.UNPAID },
-  ],
   subscriptions: [
     { id: '8', label: 'Netflix', amount: 549, status: TransactionStatus.UNPAID },
     { id: '9', label: 'Spotify', amount: 149, status: TransactionStatus.UNPAID },
@@ -89,9 +86,7 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('fintrack-data');
       if (saved) {
         try {
-          const parsed = JSON.parse(saved);
-          if (!parsed.payables) parsed.payables = [];
-          return parsed;
+          return JSON.parse(saved);
         } catch (e) {
           console.error("Failed to parse saved financial data:", e);
         }
@@ -133,25 +128,27 @@ const App: React.FC = () => {
     const receivables = calculateTotal(data.receivables);
     const vaultSavings = calculateTotal(data.savingsAccounts);
 
-    // Monthly Committed Flow (All Liabilities - OVERVIEW FETCHES 'amount' WHICH IS MONTHLY PAYABLE)
-    const liabilityCategories = [
-      data.loans, data.payables, data.utilities, data.subscriptions, 
+    // Monthly Commitment Flow
+    // The user requested: "the total monthly payable debts is the sum of all Monthly Commitments"
+    const commitmentCategories = [
+      data.loans, data.utilities, data.subscriptions, 
       data.mandatories, data.plans, data.otherExpenses, data.savingsContribution
     ];
-    const totalLiabilities = liabilityCategories.reduce((acc, cat) => acc + calculateTotal(cat), 0);
-    const unpaidLiabilities = liabilityCategories.flat().filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
+    
+    // Total of all monthly payables
+    const totalMonthlyCommitments = commitmentCategories.reduce((acc, cat) => acc + calculateTotal(cat), 0);
+    
+    // Only those that are not marked as PAID
+    const unpaidMonthlyCommitments = commitmentCategories.flat().filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
 
-    // Debt Matrix Logic
-    // totalDebt uses 'totalAmount' if defined (full balance), otherwise 'amount'
-    const totalDebtValue = [...data.loans, ...data.payables].reduce((acc, e) => acc + (e.totalAmount !== undefined ? e.totalAmount : e.amount), 0);
-    // unpaidMonthlyDebt is what's due this month and not paid
-    const unpaidMonthlyDebt = [...data.loans, ...data.payables].filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
+    // Debt Matrix Logic (Long term balance)
+    const totalDebtBalanceValue = data.loans.reduce((acc, e) => acc + (e.totalAmount !== undefined ? e.totalAmount : e.amount), 0);
 
     // Dynamic Calculations
     const liquidAssets = liquidCash + receivables;
-    const netMonthlyCashFlow = liquidAssets - totalLiabilities;
-    const deployableFunds = liquidAssets - unpaidLiabilities;
-    const resilienceIndex = totalLiabilities > 0 ? (liquidCash / totalLiabilities) : 0;
+    const netMonthlyCashFlow = liquidAssets - totalMonthlyCommitments;
+    const deployableFunds = liquidAssets - unpaidMonthlyCommitments;
+    const resilienceIndex = totalMonthlyCommitments > 0 ? (liquidCash / totalMonthlyCommitments) : 0;
     
     // Performance Ratios
     const savingsAllocation = calculateTotal(data.savingsContribution);
@@ -162,22 +159,21 @@ const App: React.FC = () => {
       receivables,
       vaultSavings,
       liquidAssets,
-      totalLiabilities,
-      unpaidLiabilities,
+      totalMonthlyCommitments,
+      unpaidMonthlyCommitments,
       deployableFunds,
       netMonthlyCashFlow,
       resilienceIndex,
       savingsAllocation,
       savingsRate,
-      totalDebtValue,
-      unpaidMonthlyDebt
+      totalDebtBalanceValue
     };
   }, [data]);
 
   const categoryChartData = useMemo(() => [
     { name: 'Current Cash', amount: stats.liquidCash, avg: stats.liquidCash * 0.95 },
     { name: 'Incoming', amount: stats.receivables, avg: stats.receivables * 1.1 },
-    { name: 'Overhead', amount: stats.totalLiabilities, avg: stats.totalLiabilities * 1.05 },
+    { name: 'Commitments', amount: stats.totalMonthlyCommitments, avg: stats.totalMonthlyCommitments * 1.05 },
     { name: 'Vault', amount: stats.vaultSavings, avg: stats.vaultSavings * 0.9 },
   ], [stats]);
 
@@ -232,7 +228,7 @@ const App: React.FC = () => {
       const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const name = i === 0 ? "Current" : date.toLocaleString('default', { month: 'short' });
       const projected = stats.liquidCash + (monthlyNet * i);
-      const safety = stats.totalLiabilities > 0 ? Math.min(100, (projected / stats.totalLiabilities) * 100) : 100;
+      const safety = stats.totalMonthlyCommitments > 0 ? Math.min(100, (projected / stats.totalMonthlyCommitments) * 100) : 100;
       months.push({ name, balance: projected, safety });
     }
     return months;
@@ -278,7 +274,7 @@ const App: React.FC = () => {
 
         <div className="hidden md:flex items-center space-x-4">
           <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
-            {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95l16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
+            {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
           </button>
         </div>
       </header>
@@ -292,7 +288,7 @@ const App: React.FC = () => {
                 <div className={`absolute top-0 right-0 w-48 h-48 blur-[80px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
                 <div className="flex items-center mb-6">
                   <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Deployable Funds</span>
-                  <InfoTooltip formula="(Current Cash + Receivables) - Immediate Unpaid Obligations (using Monthly Payables). Your 'true' spending capacity." />
+                  <InfoTooltip formula="(Current Cash + Receivables) - Unpaid Monthly Commitments. Your actual spending capacity this month." />
                 </div>
                 <div className="flex items-baseline space-x-3">
                   <span className={`text-5xl sm:text-6xl lg:text-7xl font-mono font-bold tracking-tighter ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-900' : 'text-rose-600'}`}>
@@ -304,14 +300,14 @@ const App: React.FC = () => {
               <div className="bento-card rounded-[2.5rem] p-10 flex flex-col justify-center min-h-[220px] relative overflow-hidden border-t-8 border-slate-400">
                 <div className="absolute top-0 right-0 w-48 h-48 bg-slate-400 opacity-10 blur-[80px]"></div>
                 <div className="flex items-center mb-6">
-                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Monthly Payable Debt</span>
-                  <InfoTooltip formula="Sum of all currently UNPAID Monthly Payable amounts for loans and payables." />
+                  <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Monthly Payable Debts</span>
+                  <InfoTooltip formula="Sum of all Monthly Commitments (Loans, Utilities, Mandatories, Subs, Plans, Savings, and Other Expenses)." />
                 </div>
                 <div className="flex items-baseline space-x-3">
-                  <span className="text-5xl sm:text-6xl lg:text-7xl font-mono font-bold text-rose-500 tracking-tighter">
-                    ₱{stats.unpaidMonthlyDebt.toLocaleString()}
+                  <span className="text-5xl sm:text-6xl lg:text-7xl font-mono font-bold dark:text-white text-slate-900 tracking-tighter">
+                    ₱{stats.totalMonthlyCommitments.toLocaleString()}
                   </span>
-                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest block">Due Now</span>
+                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest block">Requirement</span>
                 </div>
               </div>
 
@@ -319,7 +315,7 @@ const App: React.FC = () => {
                 <div className={`absolute top-0 right-0 w-48 h-48 blur-[80px] opacity-20 ${stats.resilienceIndex >= 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
                 <div className="flex items-center mb-6">
                   <span className="text-xs font-extrabold text-slate-500 uppercase tracking-[0.3em]">Resilience Score</span>
-                  <InfoTooltip formula="Cash on Hand / Total Monthly Overhead (using Monthly Payables). Measures months of runway." />
+                  <InfoTooltip formula="Cash on Hand / Total Monthly Commitments. Measures months of runway against all obligations." />
                 </div>
                 <div className="flex items-baseline space-x-3">
                   <span className={`text-5xl sm:text-6xl lg:text-7xl font-mono font-bold tracking-tighter ${stats.resilienceIndex >= 1 ? 'text-emerald-600' : 'text-amber-500'}`}>
@@ -335,7 +331,7 @@ const App: React.FC = () => {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
                   <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">Capital Benchmarks</h2>
-                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-2">Comparison of Liquidity vs Liabilities (Monthly View)</p>
+                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-2">Comparison of Liquidity vs Total Monthly Commitments</p>
                 </div>
               </div>
               <div className="flex-grow w-full">
@@ -369,14 +365,14 @@ const App: React.FC = () => {
               </div>
 
               <div className="bento-card rounded-3xl p-8 border-l-8 border-rose-600 shadow-xl shadow-rose-600/5">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em] mb-2 block text-rose-500">Debt Matrix (Total Balances)</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em] mb-2 block text-rose-500">Debt Matrix</span>
                 <div className="flex justify-between items-baseline mb-2">
-                   <span className="text-3xl font-mono font-bold dark:text-white text-slate-900">₱{stats.totalDebtValue.toLocaleString()}</span>
-                   <span className="text-[10px] font-black text-slate-400 uppercase">Grand Total</span>
+                   <span className="text-3xl font-mono font-bold dark:text-white text-slate-900">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
+                   <span className="text-[10px] font-black text-slate-400 uppercase">Grand Balance</span>
                 </div>
                 <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-baseline">
-                   <span className="text-xl font-mono font-bold text-rose-500">₱{stats.unpaidMonthlyDebt.toLocaleString()}</span>
-                   <span className="text-[10px] font-black text-rose-400 uppercase">Monthly Due</span>
+                   <span className="text-xl font-mono font-bold text-rose-500">₱{stats.unpaidMonthlyCommitments.toLocaleString()}</span>
+                   <span className="text-[10px] font-black text-rose-400 uppercase">Unpaid Commitments</span>
                 </div>
               </div>
 
@@ -432,10 +428,10 @@ const App: React.FC = () => {
                         <div>
                           <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-widest">
                             <span>Liability Ratio</span>
-                            <span className="text-indigo-500">{stats.liquidAssets > 0 ? ((stats.totalLiabilities / stats.liquidAssets) * 100).toFixed(1) : 0}%</span>
+                            <span className="text-indigo-500">{stats.liquidAssets > 0 ? ((stats.totalMonthlyCommitments / stats.liquidAssets) * 100).toFixed(1) : 0}%</span>
                           </div>
                           <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500 transition-all duration-1000" style={{width: `${Math.min(100, stats.liquidAssets > 0 ? (stats.totalLiabilities / stats.liquidAssets) * 100 : 0)}%`}}></div>
+                            <div className="h-full bg-indigo-500 transition-all duration-1000" style={{width: `${Math.min(100, stats.liquidAssets > 0 ? (stats.totalMonthlyCommitments / stats.liquidAssets) * 100 : 0)}%`}}></div>
                           </div>
                         </div>
                       </div>
@@ -464,7 +460,7 @@ const App: React.FC = () => {
                        </div>
                        <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest">{Math.round(month.safety)}% Coverage</span>
                     </div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4">Projected Surplus vs Current Overhead</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4">Projected Surplus vs Commitments</p>
                  </div>
                ))}
              </div>
@@ -487,7 +483,6 @@ const App: React.FC = () => {
             <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-rose-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Monthly Commitments</h3></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
               <FinancialCard title="Loans & Debt" totalLabel="Monthly Payable" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} />
-              <FinancialCard title="Payables Due" totalLabel="Monthly Payable" entries={data.payables} accentColor="border-rose-400" isDebt hasStatus onAdd={(l, a, t) => addEntry('payables', l, a, t)} onDelete={(id) => deleteEntry('payables', id)} onUpdateStatus={(id, s) => updateStatus('payables', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} />
               <FinancialCard title="Utilities" totalLabel="Total Due" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} />
               <FinancialCard title="Mandatory Costs" totalLabel="Tax/Health" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} />
               <FinancialCard title="Subscriptions" totalLabel="Monthly Total" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} />
@@ -503,7 +498,7 @@ const App: React.FC = () => {
         <div className="dark:bg-slate-900/70 bg-white/70 backdrop-blur-2xl border dark:border-slate-800 border-slate-200/60 p-4 rounded-[1.5rem] shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/10">
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center">
             <svg className="w-4 h-4 mr-3 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
-            FinTrack Pro v3.3 Integrated Debt Balance Tracking
+            FinTrack Pro v3.5 Commitment Unified
           </span>
         </div>
       </footer>

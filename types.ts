@@ -24,7 +24,6 @@ export interface DashboardData {
   accountBalances: FinancialEntry[];
   receivables: FinancialEntry[];
   loans: FinancialEntry[];
-  payables: FinancialEntry[];
   subscriptions: FinancialEntry[];
   savingsContribution: FinancialEntry[];
   utilities: FinancialEntry[];
