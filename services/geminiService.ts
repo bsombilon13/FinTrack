@@ -5,7 +5,6 @@ import { DashboardData } from "../types";
 export type InsightView = 'overview' | 'prediction';
 
 export const getFinancialInsights = async (data: DashboardData, view: InsightView = 'overview'): Promise<string> => {
-  // Always create a fresh instance to ensure we use the latest API key from the environment/dialog
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     throw new Error("API_KEY_MISSING");
@@ -15,29 +14,27 @@ export const getFinancialInsights = async (data: DashboardData, view: InsightVie
   
   const overviewPrompt = `
     Analyze this financial state: ${JSON.stringify(data)}
-    Provide a concise 3-sentence executive summary:
-    1. Overall health (Liquid cash vs Total Debt).
-    2. Most urgent expense or saving opportunity.
-    3. One quick win for this week.
-    Keep it snappy and encouraging.
+    Provide a concise executive summary formatted for high readability:
+    - Use bullet points.
+    - Bold the most important figures or actions.
+    - Mention: 1) Overall health 2) Urgent priorities 3) A quick win for today.
+    Keep it professional, direct, and under 100 words.
   `;
 
   const predictionPrompt = `
-    You are a Financial Forecasting Expert. Analyze this data: ${JSON.stringify(data)}
-    Provide a detailed 90-day trajectory analysis.
-    Assume monthly recurring costs repeat. 
+    You are an Elite Financial Analyst. Analyze this data: ${JSON.stringify(data)}
+    Provide a detailed 90-day trajectory. Format strictly in Markdown with these headers:
     
-    Required structure in Markdown:
-    ### 90-Day Trajectory
-    How much cash is projected to remain?
+    ### Projected Runway
+    Bullet points on cash remaining and balance health. Use bold for numbers.
     
-    ### Risk Assessment
-    What is the biggest threat to this forecast?
+    ### Risk Vectors
+    What is the primary threat? (e.g., debt interest, spending spikes).
     
-    ### Strategic Moves
-    Two specific actions to improve the quarter-end balance.
+    ### Strategic Imperatives
+    Three specific, actionable actions to double resilience by quarter-end.
     
-    Be direct, analytical, and professional.
+    Ensure maximum readability with short sentences and clear structures.
   `;
 
   try {
@@ -49,7 +46,7 @@ export const getFinancialInsights = async (data: DashboardData, view: InsightVie
         }] 
       }],
       config: {
-        systemInstruction: "You are an elite financial strategist. You provide high-signal, low-noise advice based on cash flow patterns."
+        systemInstruction: "You are an elite financial strategist. Your goal is to provide high-signal, low-noise advice. Format your output with clear headers, bullet points, and bold text for scanning."
       }
     });
 
