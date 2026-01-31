@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FinancialEntry, DashboardData, TransactionStatus } from './types';
 import FinancialCard from './components/FinancialCard';
 import { getFinancialInsights, InsightView } from './services/geminiService';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell } from 'recharts';
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
 type TabType = 'overview' | 'assets' | 'obligations' | 'prediction';
 type Theme = 'dark' | 'light';
@@ -26,7 +26,7 @@ const InfoTooltip: React.FC<{ formula: string }> = ({ formula }) => (
         <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"></path></svg>
         <span className="uppercase text-indigo-300 font-extrabold tracking-[0.15em] text-[10px]">Financial Calculation</span>
       </div>
-      <p className="font-medium text-slate-200">{formula}</p>
+      <p className="font-medium text-slate-200 whitespace-pre-wrap">{formula}</p>
       <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900/95 dark:border-t-slate-800/95"></div>
     </div>
   </div>
@@ -151,6 +151,7 @@ const App: React.FC = () => {
     const liquidAssets = liquidCash + unpaidReceivables;
     const netMonthlyCashFlow = (liquidCash + totalReceivables) - totalMonthlyCommitments;
     const resilienceIndex = totalMonthlyCommitments > 0 ? (liquidCash / totalMonthlyCommitments) : 0;
+    const safetyFactorValue = totalMonthlyCommitments > 0 ? (liquidCash / totalMonthlyCommitments) * 100 : 0;
     
     const savingsAllocation = calculateTotal(data.savingsContribution);
     const savingsRate = liquidAssets > 0 ? (savingsAllocation / liquidAssets) * 100 : 0;
@@ -166,6 +167,7 @@ const App: React.FC = () => {
       deployableFunds,
       netMonthlyCashFlow,
       resilienceIndex,
+      safetyFactorValue,
       savingsAllocation,
       savingsRate,
       totalDebtBalanceValue,
@@ -285,44 +287,58 @@ const App: React.FC = () => {
       <main className="max-w-[1720px] mx-auto p-4 md:p-8 lg:p-12 space-y-12 pb-32 overflow-x-hidden">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
-            {/* Health Pillars */}
-            <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
-              <div className={`bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-indigo-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
+            {/* Primary Health Pillars */}
+            <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+              <div className={`bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col justify-center min-h-[220px] lg:min-h-[250px] relative border-t-[10px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-indigo-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
                 <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-8">
-                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Deployable Funds</span>
-                  <InfoTooltip formula="(Current Cash + Unpaid Revenue) - Unpaid Commitments. Your actual spending capacity." />
+                <div className="flex items-center mb-6">
+                  <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Deployable Funds</span>
+                  <InfoTooltip formula="(Liquid Cash + Unpaid Receivables) - Unpaid Commitments. Your actual spending capacity." />
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className={`text-4xl sm:text-5xl lg:text-7xl font-mono font-bold tracking-tight leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-900' : 'text-rose-600'}`}>
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tight leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-900' : 'text-rose-600'}`}>
                     ₱{stats.deployableFunds.toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <div className="bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] border-slate-400">
+              <div className="bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col justify-center min-h-[220px] lg:min-h-[250px] relative border-t-[10px] border-slate-400">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-slate-400 opacity-10 blur-[100px]"></div>
-                <div className="flex items-center mb-8">
-                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Remaining Debts</span>
-                  <InfoTooltip formula="Sum of all UNPAID Monthly Commitments." />
+                <div className="flex items-center mb-6">
+                  <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Net Flow Total Out</span>
+                  <InfoTooltip formula="Sum of ALL category monthly requirements (Paid + Unpaid). Your full monthly overhead." />
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className="text-4xl sm:text-5xl lg:text-7xl font-mono font-bold dark:text-white text-slate-900 tracking-tight leading-none">
-                    ₱{stats.unpaidMonthlyCommitments.toLocaleString()}
+                  <span className="text-4xl sm:text-5xl lg:text-6xl font-mono font-bold dark:text-white text-slate-900 tracking-tight leading-none">
+                    ₱{stats.totalMonthlyCommitments.toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <div className={`bento-card rounded-[3rem] p-8 lg:p-12 flex flex-col justify-center min-h-[220px] lg:min-h-[280px] relative border-t-[10px] ${stats.resilienceIndex >= 1 ? 'border-emerald-600 shadow-emerald-500/10' : 'border-amber-500 shadow-amber-500/10'}`}>
-                <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.resilienceIndex >= 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
-                <div className="flex items-center mb-8">
-                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Resilience Score</span>
-                  <InfoTooltip formula="Current Cash / Total Requirement. Measures months of runway against all obligations." />
+              <div className={`bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col justify-center min-h-[220px] lg:min-h-[250px] relative border-t-[10px] ${stats.safetyFactorValue >= 100 ? 'border-emerald-600' : 'border-amber-500'}`}>
+                <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.safetyFactorValue >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                <div className="flex items-center mb-6">
+                  <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Safety Factor</span>
+                  <InfoTooltip formula="(Liquid Cash / Total Monthly Requirement) * 100. Measures what % of your total monthly needs is covered by current cash." />
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-3">
-                  <span className={`text-4xl sm:text-5xl lg:text-7xl font-mono font-bold tracking-tight leading-none ${stats.resilienceIndex >= 1 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tight leading-none ${stats.safetyFactorValue >= 100 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                    {stats.safetyFactorValue.toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className={`bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col justify-center min-h-[220px] lg:min-h-[250px] relative border-t-[10px] ${stats.resilienceIndex >= 1 ? 'border-emerald-600 shadow-emerald-500/10' : 'border-amber-500 shadow-amber-500/10'}`}>
+                <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 ${stats.resilienceIndex >= 1 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                <div className="flex items-center mb-6">
+                  <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-[0.4em]">Resilience Score</span>
+                  <InfoTooltip formula="Liquid Cash / Total Monthly Requirement. Measures how many months of runway you have against current overhead." />
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tight leading-none ${stats.resilienceIndex >= 1 ? 'text-emerald-600' : 'text-amber-500'}`}>
                     {stats.resilienceIndex.toFixed(1)}
                   </span>
+                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest shrink-0 mt-2">Runway</span>
                 </div>
               </div>
             </div>
@@ -337,22 +353,53 @@ const App: React.FC = () => {
               </div>
               <div className="flex-grow w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={categoryChartData}>
+                  <ComposedChart data={categoryChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 800, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} />
-                    <YAxis hide />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}}
+                      dy={10}
+                    />
+                    <YAxis 
+                      hide={false}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{fontSize: 10, fontWeight: 600, fill: theme === 'dark' ? '#475569' : '#94a3b8'}}
+                      tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                    />
                     <Tooltip 
                       cursor={{fill: theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(226, 232, 240, 0.4)'}}
                       contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '24px', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
                       itemStyle={{fontSize: '13px', fontWeight: 'bold'}}
                       formatter={(value: any) => [`₱${Number(value).toLocaleString()}`]}
                     />
-                    <Bar dataKey="amount" radius={[16, 16, 0, 0]} barSize={80}>
+                    <Legend 
+                      verticalAlign="top" 
+                      align="right" 
+                      wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                    />
+                    <Bar name="Current Amount" dataKey="amount" radius={[16, 16, 0, 0]} barSize={80}>
                       {categoryChartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.9} />
                       ))}
+                      <LabelList 
+                        dataKey="amount" 
+                        position="top" 
+                        formatter={(val: number) => `₱${(val / 1000).toFixed(1)}k`} 
+                        style={{ fontSize: '10px', fontWeight: 'bold', fill: theme === 'dark' ? '#94a3b8' : '#64748b' }} 
+                      />
                     </Bar>
-                    <Line type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={5} dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} strokeDasharray="10 8" />
+                    <Line 
+                      name="Risk Threshold" 
+                      type="monotone" 
+                      dataKey="avg" 
+                      stroke="#f43f5e" 
+                      strokeWidth={5} 
+                      dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} 
+                      strokeDasharray="10 8" 
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
