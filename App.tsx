@@ -6,6 +6,7 @@ import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
 type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'forecast';
+type TransactionFormMode = 'movement' | 'settle';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -72,6 +73,7 @@ const DEFAULT_DATA: DashboardData = {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [transactionFormMode, setTransactionFormMode] = useState<TransactionFormMode>('movement');
   const [isExporting, setIsExporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<TransactionType | 'All'>('All');
@@ -202,6 +204,14 @@ const App: React.FC = () => {
       return matchesSearch && matchesType;
     });
   }, [data.transactions, searchQuery, filterType]);
+
+  const filteredTotals = useMemo(() => {
+    return filteredTransactions.reduce((acc, tx) => {
+      if (tx.type === TransactionType.CREDIT) acc.credits += tx.amount;
+      else acc.debits += tx.amount;
+      return acc;
+    }, { credits: 0, debits: 0 });
+  }, [filteredTransactions]);
 
   const handleExportPdf = async () => {
     setIsExporting(true);
@@ -497,113 +507,151 @@ const App: React.FC = () => {
         {activeTab === 'transactions' && (
           <section key="transactions" className="space-y-10 animate-in">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-              <div className="xl:col-span-4 flex flex-col gap-8">
-                <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-indigo-600 shadow-xl shadow-indigo-600/5">
-                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Record Movement</h2>
-                  <form onSubmit={handleAddGeneralMovement} className="space-y-6">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</label>
-                      <input type="text" placeholder="e.g. Salary, Groceries..." value={txDesc} onChange={(e) => setTxDesc(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 transition-all" required />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Type</label>
-                        <select value={txType} onChange={(e) => setTxType(e.target.value as TransactionType)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer">
-                          <option value={TransactionType.DEBIT}>Debit (Out)</option>
-                          <option value={TransactionType.CREDIT}>Credit (In)</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</label>
-                        <input type="number" placeholder="0.00" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-indigo-500 transition-all" required />
-                      </div>
-                    </div>
-                    {txType === TransactionType.CREDIT && (
-                      <div className="space-y-4 animate-in">
+              <div className="xl:col-span-4 flex flex-col">
+                <div className={`bento-card rounded-[2.5rem] p-8 border-t-[10px] shadow-xl transition-colors duration-500 ${transactionFormMode === 'movement' ? 'border-indigo-600 shadow-indigo-600/5' : 'border-emerald-600 shadow-emerald-600/5'}`}>
+                  {/* Form Toggle Button */}
+                  <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl mb-8">
+                    <button 
+                      onClick={() => setTransactionFormMode('movement')}
+                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                        transactionFormMode === 'movement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      General Movement
+                    </button>
+                    <button 
+                      onClick={() => setTransactionFormMode('settle')}
+                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                        transactionFormMode === 'settle' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      Settle Obligation
+                    </button>
+                  </div>
+
+                  {transactionFormMode === 'movement' ? (
+                    <div className="animate-in">
+                      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Record Movement</h2>
+                      <form onSubmit={handleAddGeneralMovement} className="space-y-6">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inbound Source</label>
-                          <select value={txRevenueId} onChange={(e) => setTxRevenueId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
-                            <option value="">Select source...</option>
-                            <option value="custom">+ New Income Source</option>
-                            {(data.receivables || []).filter(r => r.status !== TransactionStatus.PAID).map(r => (
-                              <option key={r.id} value={r.id}>{r.label} (₱{r.amount.toLocaleString()})</option>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</label>
+                          <input type="text" placeholder="e.g. Salary, Groceries..." value={txDesc} onChange={(e) => setTxDesc(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 transition-all" required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Type</label>
+                            <select value={txType} onChange={(e) => setTxType(e.target.value as TransactionType)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer">
+                              <option value={TransactionType.DEBIT}>Debit (Out)</option>
+                              <option value={TransactionType.CREDIT}>Credit (In)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</label>
+                            <input type="number" placeholder="0.00" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-indigo-500 transition-all" required />
+                          </div>
+                        </div>
+                        {txType === TransactionType.CREDIT && (
+                          <div className="space-y-4 animate-in">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inbound Source</label>
+                              <select value={txRevenueId} onChange={(e) => setTxRevenueId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                                <option value="">Select source...</option>
+                                <option value="custom">+ New Income Source</option>
+                                {(data.receivables || []).filter(r => r.status !== TransactionStatus.PAID).map(r => (
+                                  <option key={r.id} value={r.id}>{r.label} (₱{r.amount.toLocaleString()})</option>
+                                ))}
+                              </select>
+                            </div>
+                            {txRevenueId === 'custom' && (
+                              <div className="space-y-1"><label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">New Source Label</label><input type="text" placeholder="e.g. Gift, Bonus..." value={txCustomRevenueLabel} onChange={(e) => setTxCustomRevenueLabel(e.target.value)} className="w-full bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-900/40 rounded-xl px-4 py-2.5 text-sm outline-none" required /></div>
+                            )}
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source / Target Account</label>
+                          <select value={txSource} onChange={(e) => setTxSource(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                            <option value="">Select account...</option>
+                            <optgroup label="Liquid Cash">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                            <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                          </select>
+                        </div>
+                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record Movement</button>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="animate-in">
+                      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Settle Obligation</h2>
+                      <form onSubmit={handleSettleObligation} className="space-y-6">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Obligation to Pay</label>
+                          <select value={payObligationId} onChange={(e) => setPayObligationId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                            <option value="">Pending Obligations...</option>
+                            {['loans', 'utilities', 'subscriptions', 'mandatories', 'plans', 'savingsContribution', 'otherExpenses'].map(cat => (
+                              <optgroup key={cat} label={cat.toUpperCase()}>
+                                {(data[cat as keyof DashboardData] as FinancialEntry[] || []).filter(o => o.status !== TransactionStatus.PAID).map(o => (
+                                  <option key={o.id} value={o.id}>{o.label} (₱{o.amount.toLocaleString()})</option>
+                                ))}
+                              </optgroup>
                             ))}
                           </select>
                         </div>
-                        {txRevenueId === 'custom' && (
-                          <div className="space-y-1"><label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">New Source Label</label><input type="text" placeholder="e.g. Gift, Bonus..." value={txCustomRevenueLabel} onChange={(e) => setTxCustomRevenueLabel(e.target.value)} className="w-full bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-900/40 rounded-xl px-4 py-2.5 text-sm outline-none" required /></div>
-                        )}
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source / Target Account</label>
-                      <select value={txSource} onChange={(e) => setTxSource(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
-                        <option value="">Select account...</option>
-                        <optgroup label="Liquid Cash">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
-                        <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
-                      </select>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Asset Source</label>
+                          <select value={paySourceId} onChange={(e) => setPaySourceId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                            <option value="">Select account...</option>
+                            {(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                            {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                          </select>
+                        </div>
+                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
+                      </form>
                     </div>
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record Movement</button>
-                  </form>
-                </div>
-
-                <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-emerald-600 shadow-xl shadow-emerald-600/5">
-                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Settle Obligation</h2>
-                  <form onSubmit={handleSettleObligation} className="space-y-6">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Obligation to Pay</label>
-                      <select value={payObligationId} onChange={(e) => setPayObligationId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
-                        <option value="">Pending Obligations...</option>
-                        {['loans', 'utilities', 'subscriptions', 'mandatories', 'plans', 'savingsContribution', 'otherExpenses'].map(cat => (
-                          <optgroup key={cat} label={cat.toUpperCase()}>
-                            {(data[cat as keyof DashboardData] as FinancialEntry[] || []).filter(o => o.status !== TransactionStatus.PAID).map(o => (
-                              <option key={o.id} value={o.id}>{o.label} (₱{o.amount.toLocaleString()})</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Asset Source</label>
-                      <select value={paySourceId} onChange={(e) => setPaySourceId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
-                        <option value="">Select account...</option>
-                        {(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                        {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                      </select>
-                    </div>
-                    <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
-                  </form>
+                  )}
                 </div>
               </div>
 
-              <div className="xl:col-span-8 bento-card rounded-[2.5rem] p-10 flex flex-col min-h-[700px]">
-                <div className="flex justify-between items-center mb-10">
-                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Capital Ledger</h2>
-                  <div className="flex gap-4">
-                    <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-5 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
-                    <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
-                      <option value="All">All Types</option>
-                      <option value={TransactionType.CREDIT}>Credits</option>
-                      <option value={TransactionType.DEBIT}>Debits</option>
-                    </select>
+              <div className="xl:col-span-8 flex flex-col space-y-8">
+                {/* Transaction Summary Section */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="bento-card rounded-[2rem] p-6 border-l-[8px] border-emerald-500">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 block mb-2">Total Credits (Filtered)</span>
+                    <span className="text-2xl font-mono font-bold text-emerald-500">₱{filteredTotals.credits.toLocaleString()}</span>
+                  </div>
+                  <div className="bento-card rounded-[2rem] p-6 border-l-[8px] border-rose-500">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 block mb-2">Total Debits (Filtered)</span>
+                    <span className="text-2xl font-mono font-bold text-rose-500">₱{filteredTotals.debits.toLocaleString()}</span>
                   </div>
                 </div>
-                <div className="flex-grow overflow-x-auto no-scrollbar">
-                  <table className="w-full text-left border-collapse">
-                    <thead><tr className="border-b dark:border-slate-800 border-slate-100"><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Date</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Description</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Source</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Type</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400 text-right">Amount</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400"></th></tr></thead>
-                    <tbody className="divide-y dark:divide-slate-800/40 divide-slate-100/40">
-                      {filteredTransactions.map((tx) => (
-                        <tr key={tx.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
-                          <td className="py-5 font-mono text-[11px] text-slate-500">{tx.date}</td>
-                          <td className="py-5 text-sm font-black">{tx.description}</td>
-                          <td className="py-5"><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg">{tx.sourceLabel}</span></td>
-                          <td className="py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border ${tx.type === TransactionType.CREDIT ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{tx.type}</span></td>
-                          <td className={`py-5 text-right font-mono text-sm font-bold ${tx.type === TransactionType.CREDIT ? 'text-emerald-500' : 'text-rose-500'}`}>{tx.type === TransactionType.CREDIT ? '+' : '-'}₱{tx.amount.toLocaleString()}</td>
-                          <td className="py-5 text-right"><button onClick={() => deleteTransaction(tx.id)} className="p-2 opacity-0 group-hover:opacity-100 hover:text-rose-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                <div className="bento-card rounded-[2.5rem] p-10 flex flex-col min-h-[500px]">
+                  <div className="flex justify-between items-center mb-10">
+                    <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Capital Ledger</h2>
+                    <div className="flex gap-4">
+                      <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-5 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
+                      <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
+                        <option value="All">All Types</option>
+                        <option value={TransactionType.CREDIT}>Credits</option>
+                        <option value={TransactionType.DEBIT}>Debits</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex-grow overflow-x-auto no-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                      <thead><tr className="border-b dark:border-slate-800 border-slate-100"><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Date</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Description</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Source</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Type</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400 text-right">Amount</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400"></th></tr></thead>
+                      <tbody className="divide-y dark:divide-slate-800/40 divide-slate-100/40">
+                        {filteredTransactions.map((tx) => (
+                          <tr key={tx.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
+                            <td className="py-5 font-mono text-[11px] text-slate-500">{tx.date}</td>
+                            <td className="py-5 text-sm font-black">{tx.description}</td>
+                            <td className="py-5"><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg">{tx.sourceLabel}</span></td>
+                            <td className="py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border ${tx.type === TransactionType.CREDIT ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{tx.type}</span></td>
+                            <td className={`py-5 text-right font-mono text-sm font-bold ${tx.type === TransactionType.CREDIT ? 'text-emerald-500' : 'text-rose-500'}`}>{tx.type === TransactionType.CREDIT ? '+' : '-'}₱{tx.amount.toLocaleString()}</td>
+                            <td className="py-5 text-right"><button onClick={() => deleteTransaction(tx.id)} className="p-2 opacity-0 group-hover:opacity-100 hover:text-rose-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
