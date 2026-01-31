@@ -129,7 +129,6 @@ const App: React.FC = () => {
     const vaultSavings = calculateTotal(data.savingsAccounts);
 
     // Monthly Commitment Flow
-    // The user requested: "the total monthly payable debts is the sum of all Monthly Commitments"
     const commitmentCategories = [
       data.loans, data.utilities, data.subscriptions, 
       data.mandatories, data.plans, data.otherExpenses, data.savingsContribution
@@ -242,7 +241,7 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
       <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-4">
         <div className="flex items-center justify-between w-full md:w-auto">
           <div className="flex items-center space-x-4">
@@ -470,7 +469,8 @@ const App: React.FC = () => {
         {activeTab === 'assets' && (
           <div key="assets" className="space-y-8 animate-in">
             <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-emerald-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Capital Pools</h3></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* Asset grid forced to wrap cleanly */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
               <FinancialCard title="Vault Savings" totalLabel="Total Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
               <FinancialCard title="Expected Revenue" totalLabel="Total Expected" entries={data.receivables} accentColor="border-amber-500" hasStatus onAdd={(l, a) => addEntry('receivables', l, a)} onDelete={(id) => deleteEntry('receivables', id)} onUpdateStatus={(id, s) => updateStatus('receivables', id, s)} onUpdateEntry={updateEntry} />
@@ -481,7 +481,8 @@ const App: React.FC = () => {
         {activeTab === 'obligations' && (
           <div key="obligations" className="space-y-8 animate-in">
             <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-rose-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Monthly Commitments</h3></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {/* Obligation grid ensures auto width adjustment and wraps correctly to prevent horizontal scroll */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
               <FinancialCard title="Loans & Debt" totalLabel="Monthly Payable" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} />
               <FinancialCard title="Utilities" totalLabel="Total Due" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} />
               <FinancialCard title="Mandatory Costs" totalLabel="Tax/Health" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} />
@@ -493,15 +494,6 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
-
-      <footer className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-3rem)] max-w-lg px-4 pointer-events-none md:block hidden opacity-80">
-        <div className="dark:bg-slate-900/70 bg-white/70 backdrop-blur-2xl border dark:border-slate-800 border-slate-200/60 p-4 rounded-[1.5rem] shadow-2xl flex items-center justify-center gap-4 ring-1 ring-white/10">
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center">
-            <svg className="w-4 h-4 mr-3 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
-            FinTrack Pro v3.5 Commitment Unified
-          </span>
-        </div>
-      </footer>
     </div>
   );
 };
