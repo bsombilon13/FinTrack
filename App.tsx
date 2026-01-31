@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { FinancialEntry, DashboardData, TransactionStatus } from './types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FinancialEntry, DashboardData, TransactionStatus, Transaction, TransactionType } from './types';
 import FinancialCard from './components/FinancialCard';
 import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
-type TabType = 'overview' | 'assets' | 'obligations' | 'prediction' | 'forecast';
+type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'prediction' | 'forecast';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -67,11 +67,29 @@ const DEFAULT_DATA: DashboardData = {
     { id: '15', label: 'Groceries', amount: 6000, status: TransactionStatus.UNPAID },
     { id: '16', label: 'Transport', amount: 2000, status: TransactionStatus.UNPAID },
   ],
+  transactions: [],
 };
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isExporting, setIsExporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<TransactionType | 'All'>('All');
+  
+  // General Movement Form State
+  const [txDesc, setTxDesc] = useState('');
+  const [txType, setTxType] = useState<TransactionType>(TransactionType.DEBIT);
+  const [txAmount, setTxAmount] = useState('');
+  const [txSource, setTxSource] = useState(''); 
+  const [txRevenueId, setTxRevenueId] = useState('');
+  const [txCustomRevenueLabel, setTxCustomRevenueLabel] = useState('');
+  const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Obligation Payment Form State
+  const [payObligationId, setPayObligationId] = useState('');
+  const [paySourceId, setPaySourceId] = useState('');
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('fintrack-theme');
@@ -108,7 +126,6 @@ const App: React.FC = () => {
   const generateId = () => Math.random().toString(36).substr(2, 9);
   const calculateTotal = (entries: FinancialEntry[]) => entries.reduce((a, b) => a + b.amount, 0);
 
-  // UNIFIED COMPUTATION ENGINE
   const stats = useMemo(() => {
     const liquidCash = calculateTotal(data.accountBalances);
     const vaultSavings = calculateTotal(data.savingsAccounts);
@@ -143,20 +160,10 @@ const App: React.FC = () => {
     const savingsRate = liquidAssets > 0 ? (savingsAllocation / liquidAssets) * 100 : 0;
 
     return {
-      liquidCash,
-      totalReceivables,
-      unpaidReceivables,
-      vaultSavings,
-      liquidAssets,
-      totalMonthlyCommitments,
-      unpaidMonthlyCommitments,
-      deployableFunds,
-      netMonthlyCashFlow,
-      safetyFactorValue,
-      savingsAllocation,
-      savingsRate,
-      totalDebtBalanceValue,
-      categoryTotals
+      liquidCash, totalReceivables, unpaidReceivables, vaultSavings, liquidAssets,
+      totalMonthlyCommitments, unpaidMonthlyCommitments, deployableFunds,
+      netMonthlyCashFlow, safetyFactorValue, savingsAllocation, savingsRate,
+      totalDebtBalanceValue, categoryTotals
     };
   }, [data]);
 
@@ -164,30 +171,21 @@ const App: React.FC = () => {
     const now = new Date();
     const months = [];
     let currentBalance = stats.liquidCash;
-    const monthlyInflow = stats.unpaidReceivables;
-    const monthlyOutflow = stats.totalMonthlyCommitments;
-
     for (let i = 0; i < 6; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-      const inflow = i === 0 ? monthlyInflow : (stats.unpaidReceivables * 0.5);
-      const outflow = monthlyOutflow;
+      const inflow = i === 0 ? stats.unpaidReceivables : (stats.unpaidReceivables * 0.5);
+      const outflow = stats.totalMonthlyCommitments;
       const net = inflow - outflow;
       currentBalance += net;
-      months.push({ id: i, name: monthName, inflow, outflow, net, balance: currentBalance });
+      months.push({ id: i, name: date.toLocaleString('default', { month: 'long', year: 'numeric' }), inflow, outflow, net, balance: currentBalance });
     }
     return months;
   }, [stats]);
 
   const handleExportPdf = async () => {
     setIsExporting(true);
-    try {
-      await generateFinancialReport(data, stats, detailedForecast);
-    } catch (error) {
-      console.error("PDF Export Error:", error);
-    } finally {
-      setIsExporting(false);
-    }
+    try { await generateFinancialReport(data, stats, detailedForecast); } 
+    catch (e) { console.error(e); } finally { setIsExporting(false); }
   };
 
   const categoryChartData = useMemo(() => [
@@ -199,37 +197,132 @@ const App: React.FC = () => {
 
   const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number) => {
     const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID };
-    setData(prev => ({ ...prev, [section]: [...prev[section], newEntry] }));
+    setData(prev => ({ ...prev, [section]: [...(prev[section] as any[]), newEntry] }));
   };
 
   const deleteEntry = (section: keyof DashboardData, id: string) => {
-    setData(prev => ({ ...prev, [section]: prev[section].filter(e => e.id !== id) }));
+    setData(prev => ({ ...prev, [section]: (prev[section] as any[]).filter((e: any) => e.id !== id) }));
   };
 
   const updateStatus = (section: keyof DashboardData, id: string, status: TransactionStatus) => {
-    setData(prev => ({ ...prev, [section]: prev[section].map(e => e.id === id ? { ...e, status } : e) }));
+    setData(prev => ({ ...prev, [section]: (prev[section] as any[]).map((e: any) => e.id === id ? { ...e, status } : e) }));
   };
 
   const updateEntry = (id: string, label: string, amount: number, totalAmount?: number) => {
     setData(prev => {
       const newData = { ...prev };
       (Object.keys(newData) as Array<keyof DashboardData>).forEach(section => {
-        newData[section] = (newData[section] as FinancialEntry[]).map(e => e.id === id ? { ...e, label, amount, totalAmount } : e);
+        if (Array.isArray(newData[section]) && section !== 'transactions') {
+           newData[section] = (newData[section] as any[]).map((e: any) => e.id === id ? { ...e, label, amount, totalAmount } : e);
+        }
       });
       return newData;
     });
   };
 
+  const handleAddGeneralMovement = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(txAmount);
+    if (!txDesc || isNaN(amount) || !txSource) return;
+
+    const sourceEntry = [...data.accountBalances, ...data.savingsAccounts].find(a => a.id === txSource);
+    if (!sourceEntry) return;
+
+    const newTx: Transaction = {
+      id: generateId(), description: txDesc, type: txType,
+      amount, date: txDate, sourceId: txSource, sourceLabel: sourceEntry.label
+    };
+
+    setData(prev => {
+      const updated = { ...prev };
+      const updateAsset = (entries: FinancialEntry[]) => 
+        entries.map(e => e.id === txSource 
+          ? { ...e, amount: txType === TransactionType.CREDIT ? e.amount + amount : e.amount - amount } 
+          : e
+        );
+      
+      updated.accountBalances = updateAsset(prev.accountBalances);
+      updated.savingsAccounts = updateAsset(prev.savingsAccounts);
+
+      if (txType === TransactionType.CREDIT) {
+        if (txRevenueId === 'custom' && txCustomRevenueLabel) {
+          const newRevenue: FinancialEntry = { id: generateId(), label: txCustomRevenueLabel, amount, status: TransactionStatus.PAID };
+          updated.receivables = [newRevenue, ...prev.receivables];
+        } else if (txRevenueId) {
+          updated.receivables = prev.receivables.map(r => r.id === txRevenueId ? { ...r, status: TransactionStatus.PAID } : r);
+        }
+      }
+
+      updated.transactions = [newTx, ...prev.transactions];
+      return updated;
+    });
+
+    setTxDesc(''); setTxAmount(''); setTxSource(''); setTxRevenueId(''); setTxCustomRevenueLabel('');
+  };
+
+  const handleSettleObligation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payObligationId || !paySourceId) return;
+
+    const sourceEntry = [...data.accountBalances, ...data.savingsAccounts].find(a => a.id === paySourceId);
+    const obligationCategories: Array<keyof DashboardData> = ['loans', 'subscriptions', 'savingsContribution', 'utilities', 'plans', 'mandatories', 'otherExpenses'];
+    
+    let targetObligation: FinancialEntry | undefined;
+    for (const cat of obligationCategories) {
+      targetObligation = (data[cat] as FinancialEntry[]).find(o => o.id === payObligationId);
+      if (targetObligation) break;
+    }
+
+    if (!sourceEntry || !targetObligation) return;
+
+    const amount = targetObligation.amount;
+    const newTx: Transaction = {
+      id: generateId(),
+      description: `Payment: ${targetObligation.label}`,
+      type: TransactionType.DEBIT,
+      amount, date: payDate, sourceId: paySourceId, sourceLabel: sourceEntry.label
+    };
+
+    setData(prev => {
+      const updated = { ...prev };
+      const updateAsset = (entries: FinancialEntry[]) => entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
+      updated.accountBalances = updateAsset(prev.accountBalances);
+      updated.savingsAccounts = updateAsset(prev.savingsAccounts);
+
+      obligationCategories.forEach(cat => {
+        updated[cat] = (prev[cat] as FinancialEntry[]).map(o => o.id === payObligationId ? { ...o, status: TransactionStatus.PAID } : o) as any;
+      });
+
+      updated.transactions = [newTx, ...prev.transactions];
+      return updated;
+    });
+
+    setPayObligationId(''); setPaySourceId('');
+  };
+
+  const deleteTransaction = (id: string) => {
+    const tx = data.transactions.find(t => t.id === id);
+    if (!tx) return;
+    setData(prev => {
+      const reverse = (entries: FinancialEntry[]) => entries.map(e => e.id === tx.sourceId ? { ...e, amount: tx.type === TransactionType.CREDIT ? e.amount - tx.amount : e.amount + tx.amount } : e);
+      return { ...prev, accountBalances: reverse(prev.accountBalances), savingsAccounts: reverse(prev.savingsAccounts), transactions: prev.transactions.filter(t => t.id !== id) };
+    });
+  };
+
+  const filteredTransactions = useMemo(() => {
+    return data.transactions.filter(t => {
+      const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter = filterType === 'All' || t.type === filterType;
+      return matchesSearch && matchesFilter;
+    });
+  }, [data.transactions, searchQuery, filterType]);
+
   const predictionData = useMemo(() => {
     const monthlyNet = stats.netMonthlyCashFlow;
-    const now = new Date();
     const months = [];
     for(let i=0; i<=3; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const name = i === 0 ? "Current" : date.toLocaleString('default', { month: 'short' });
-      const projected = stats.liquidCash + (monthlyNet * i);
-      const safety = stats.totalMonthlyCommitments > 0 ? Math.min(100, (projected / stats.totalMonthlyCommitments) * 100) : 100;
-      months.push({ name, balance: projected, safety });
+      const date = new Date(new Date().getFullYear(), new Date().getMonth() + i, 1);
+      months.push({ name: i === 0 ? "Current" : date.toLocaleString('default', { month: 'short' }), balance: stats.liquidCash + (monthlyNet * i) });
     }
     return months;
   }, [stats]);
@@ -238,340 +331,218 @@ const App: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
     { id: 'assets', label: 'Assets', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> },
     { id: 'obligations', label: 'Obligations', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg> },
+    { id: 'transactions', label: 'Transactions', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg> },
     { id: 'prediction', label: 'Analysis', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> },
     { id: 'forecast', label: 'Forecast', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> }
   ];
 
   return (
-    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden transition-colors duration-500">
-      <header className="px-6 py-6 md:py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-6 transition-all duration-300">
-        <div className="flex items-center justify-between w-full md:w-auto min-w-0">
-          <div className="flex items-center space-x-4 min-w-0">
-            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 shrink-0">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-            </div>
-            <div className="min-w-0 truncate">
-              <h1 className="text-2xl font-black tracking-tight dark:text-white text-slate-900 leading-none truncate">FinTrack Pro</h1>
-              <div className="flex items-center mt-2 space-x-2">
-                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] leading-none truncate">Management Suite</span>
-              </div>
-            </div>
+    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 transition-colors duration-500">
+      <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-6">
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 shrink-0">
+            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
           </div>
-          
-          <div className="md:hidden flex items-center space-x-3">
-             <button 
-              onClick={handleExportPdf} 
-              disabled={isExporting}
-              className="p-3 rounded-xl border border-indigo-500/50 text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all active:scale-95 disabled:opacity-50"
-            >
-              {isExporting ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>}
-            </button>
-            <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
-              {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
-            </button>
-          </div>
+          <div><h1 className="text-2xl font-black tracking-tight leading-none">FinTrack Pro</h1><span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] mt-2 block">Management Suite</span></div>
         </div>
-        
-        <nav className="flex flex-col md:flex-row dark:bg-slate-900/60 bg-slate-100/60 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 w-full md:w-auto gap-1 transition-all duration-300">
+        <nav className="flex flex-col md:flex-row dark:bg-slate-900/60 bg-slate-100/60 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 gap-1">
           {TABS.map((tab) => (
-            <button 
-              key={tab.id} 
-              onClick={() => setActiveTab(tab.id)} 
-              className={`flex items-center space-x-3.5 md:space-x-2.5 px-6 md:px-5 py-4 md:py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 w-full md:w-auto ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}
-              aria-current={activeTab === tab.id ? 'page' : undefined}
-            >
-              <span className={`transition-all duration-300 ${activeTab === tab.id ? 'scale-110' : 'opacity-60'}`}>{tab.icon}</span>
-              <span className="flex-grow md:flex-grow-0 text-left md:text-center">{tab.label}</span>
-              {activeTab === tab.id && (
-                <svg className="w-4 h-4 md:hidden opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
-              )}
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center space-x-2.5 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
+              {tab.icon}<span>{tab.label}</span>
             </button>
           ))}
         </nav>
-
-        <div className="hidden md:flex items-center space-x-4 shrink-0">
-          <button 
-            onClick={handleExportPdf} 
-            disabled={isExporting}
-            className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isExporting ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-            )}
+        <div className="flex items-center space-x-4 shrink-0">
+          <button onClick={handleExportPdf} disabled={isExporting} className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
             <span>{isExporting ? 'Generating...' : 'Export PDF'}</span>
           </button>
-          <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
+          <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all">
             {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
           </button>
         </div>
       </header>
 
-      <main className="max-w-[1720px] mx-auto p-4 md:p-8 lg:p-12 space-y-12 pb-32 overflow-x-hidden">
+      <main className="max-w-[1720px] mx-auto p-4 md:p-12 space-y-12 pb-32">
         {activeTab === 'overview' && (
-          <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
-            <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
-              <div className={`bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-2xl shadow-indigo-600/10' : 'border-rose-600 shadow-2xl shadow-rose-600/10'}`}>
-                <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Deployable Funds</span>
-                  <InfoTooltip formula="(Liquid Cash + Unpaid Receivables) - Unpaid Commitments. Your true spending capacity." />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-950' : 'text-rose-600'}`}>
-                    ₱{stats.deployableFunds.toLocaleString()}
-                  </span>
-                  <div className="mt-3 flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${stats.deployableFunds >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`}></div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Liquidity Profile</span>
-                  </div>
-                </div>
+          <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-8 animate-in">
+            <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className={`bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] ${stats.deployableFunds >= 0 ? 'border-indigo-600' : 'border-rose-600'}`}>
+                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Deployable Funds</span><InfoTooltip formula="(Liquid + Unpaid Rev) - Unpaid Commitments" /></div>
+                <span className={`text-5xl font-mono font-bold tracking-tighter ${stats.deployableFunds >= 0 ? '' : 'text-rose-600'}`}>₱{stats.deployableFunds.toLocaleString()}</span>
               </div>
-
-              <div className="bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] border-slate-400 shadow-2xl shadow-slate-400/5">
-                <div className="absolute top-0 right-0 w-80 h-80 bg-slate-400 opacity-10 blur-[120px]"></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Net Flow Total Out</span>
-                  <InfoTooltip formula="Sum of ALL category monthly requirements (Paid + Unpaid). Your full monthly overhead." />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-4xl sm:text-5xl lg:text-6xl font-mono font-bold dark:text-white text-slate-950 tracking-tighter leading-none">
-                    ₱{stats.totalMonthlyCommitments.toLocaleString()}
-                  </span>
-                  <div className="mt-3 flex items-center space-x-2 opacity-60">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Monthly Capital Drain</span>
-                  </div>
-                </div>
+              <div className="bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] border-slate-400">
+                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Net Flow Total Out</span><InfoTooltip formula="Sum of all monthly overhead requirements" /></div>
+                <span className="text-5xl font-mono font-bold tracking-tighter">₱{stats.totalMonthlyCommitments.toLocaleString()}</span>
               </div>
-
-              <div className={`bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] transition-all duration-500 ${stats.safetyFactorValue >= 100 ? 'border-emerald-600 shadow-emerald-500/10' : stats.safetyFactorValue >= 50 ? 'border-amber-500 shadow-amber-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
-                <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.safetyFactorValue >= 100 ? 'bg-emerald-500' : stats.safetyFactorValue >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-6">
-                  <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Safety Factor</span>
-                  <InfoTooltip formula="(Liquid Cash / Total Monthly Requirement) * 100. Measures what % of your total monthly needs is covered by current cash." />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter leading-none ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : stats.safetyFactorValue >= 50 ? 'text-amber-500' : 'text-rose-600'}`}>
-                    {stats.safetyFactorValue.toFixed(0)}%
-                  </span>
-                  <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Coverage Index</span>
-                    </div>
-                    <span className="text-[11px] font-mono font-bold text-slate-500">{(stats.safetyFactorValue / 100).toFixed(1)} Months</span>
-                  </div>
-                </div>
+              <div className={`bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] ${stats.safetyFactorValue >= 100 ? 'border-emerald-600' : 'border-rose-600'}`}>
+                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Safety Factor</span><InfoTooltip formula="(Liquid Cash / Monthly Needs) * 100" /></div>
+                <span className={`text-5xl font-mono font-bold tracking-tighter ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : 'text-rose-600'}`}>{stats.safetyFactorValue.toFixed(0)}%</span>
               </div>
             </div>
-
-            <div className="md:col-span-12 lg:col-span-8 xl:col-span-9 bento-card rounded-[3rem] p-10 lg:p-14 min-h-[550px] flex flex-col">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-12 gap-6">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Capital Benchmarks</h2>
-                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-2 tracking-widest truncate">Immediate Obligations vs Available Assets</p>
-                </div>
-              </div>
+            <div className="md:col-span-12 lg:col-span-8 bento-card rounded-[3rem] p-12 h-[550px] flex flex-col">
+              <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-12">Capital Benchmarks</h2>
               <div className="flex-grow w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={categoryChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 600, fill: theme === 'dark' ? '#475569' : '#94a3b8'}} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
-                    <Tooltip cursor={{fill: theme === 'dark' ? 'rgba(30, 41, 59, 0.4)' : 'rgba(226, 232, 240, 0.4)'}} contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '24px', padding: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} itemStyle={{fontSize: '13px', fontWeight: 'bold'}} formatter={(value: any) => [`₱${Number(value).toLocaleString()}`]} />
-                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em' }} />
-                    <Bar name="Current Amount" dataKey="amount" radius={[16, 16, 0, 0]} barSize={80}>
-                      {categoryChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={theme === 'dark' ? '#6366f1' : '#4f46e5'} fillOpacity={0.9} />)}
-                      <LabelList dataKey="amount" position="top" formatter={(val: number) => `₱${(val / 1000).toFixed(1)}k`} style={{ fontSize: '10px', fontWeight: 'bold', fill: theme === 'dark' ? '#94a3b8' : '#64748b' }} />
-                    </Bar>
-                    <Line name="Risk Threshold" type="monotone" dataKey="avg" stroke="#f43f5e" strokeWidth={5} dot={{ r: 7, fill: '#f43f5e', strokeWidth: 4, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} strokeDasharray="10 8" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} tickFormatter={(v) => `₱${(v/1000)}k`} />
+                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', borderRadius: '16px' }} />
+                    <Bar dataKey="amount" radius={[10, 10, 0, 0]} barSize={60} fill="#6366f1" />
+                    <Line dataKey="avg" stroke="#f43f5e" strokeWidth={4} dot={{ r: 6, fill: '#f43f5e' }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
-
-            <div className="md:col-span-12 lg:col-span-4 xl:col-span-3 flex flex-col gap-6 lg:gap-10">
-              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-indigo-600 shadow-xl shadow-indigo-600/5 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Active Liquidity</span>
-                <span className="text-3xl xl:text-4xl font-mono font-bold dark:text-white text-slate-900 break-all">₱{stats.liquidAssets.toLocaleString()}</span>
+            <div className="md:col-span-12 lg:col-span-4 flex flex-col gap-8">
+              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-emerald-600 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 block">Vault Balance</span>
+                <span className="text-4xl font-mono font-bold text-emerald-500">₱{stats.vaultSavings.toLocaleString()}</span>
               </div>
-              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-rose-600 shadow-xl shadow-rose-600/5 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block text-rose-500">Debt Matrix</span>
-                <div className="flex flex-col gap-2">
-                   <span className="text-3xl xl:text-4xl font-mono font-bold dark:text-white text-slate-950 break-all">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
-                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                      <span className="text-xl font-mono font-bold text-rose-500 shrink-0 mr-2">₱{stats.unpaidMonthlyCommitments.toLocaleString()}</span>
-                      <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest shrink-0">Due</span>
-                   </div>
-                </div>
-              </div>
-              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-emerald-600 shadow-xl shadow-emerald-500/5 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-4 block">Vault Balance</span>
-                <span className="text-3xl xl:text-4xl font-mono font-bold text-emerald-500 break-all">₱{stats.vaultSavings.toLocaleString()}</span>
+              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-rose-600 flex flex-col justify-center">
+                <span className="text-[11px] font-black text-rose-500 uppercase tracking-[0.3em] mb-4 block">Total Liabilities</span>
+                <span className="text-4xl font-mono font-bold">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
               </div>
             </div>
           </section>
         )}
 
-        {activeTab === 'forecast' && (
-          <section key="forecast" className="space-y-12 animate-in">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b dark:border-slate-900 border-slate-200 pb-8">
-              <div className="space-y-2">
-                <h2 className="text-xs font-black uppercase tracking-[0.4em] text-indigo-500">Monthly Performance Forecast</h2>
-                <p className="text-2xl font-black dark:text-white text-slate-950">Next 6-Month Trajectory</p>
-              </div>
-              <div className="flex items-center space-x-4">
-                 <div className="flex items-center space-x-2">
-                   <div className="w-3 h-3 rounded bg-emerald-500"></div>
-                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Projected Surplus</span>
-                 </div>
-                 <div className="flex items-center space-x-2">
-                   <div className="w-3 h-3 rounded bg-rose-500"></div>
-                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Operating Loss</span>
-                 </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {detailedForecast.map((month) => (
-                <div key={month.id} className="bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col relative overflow-hidden group">
-                  <div className={`absolute top-0 right-0 w-40 h-40 blur-[80px] opacity-10 ${month.net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-                  
-                  <div className="flex justify-between items-center mb-10">
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">{month.name}</span>
-                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${month.net >= 0 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
-                      {month.net >= 0 ? 'Cash Positive' : 'Cash Burn'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-6 mb-10">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Expected In</span>
-                      <span className="font-mono text-base font-bold text-emerald-500">+₱{month.inflow.toLocaleString()}</span>
+        {activeTab === 'transactions' && (
+          <section key="transactions" className="space-y-10 animate-in">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+              <div className="xl:col-span-4 flex flex-col gap-8">
+                {/* FORM 1: Record Movement */}
+                <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-indigo-600 shadow-xl shadow-indigo-600/5">
+                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Record Movement</h2>
+                  <form onSubmit={handleAddGeneralMovement} className="space-y-6">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</label>
+                      <input type="text" placeholder="e.g. Salary, Groceries..." value={txDesc} onChange={(e) => setTxDesc(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 transition-all" required />
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Projected Out</span>
-                      <span className="font-mono text-base font-bold text-rose-500">-₱{month.outflow.toLocaleString()}</span>
-                    </div>
-                    <div className={`flex justify-between items-center pt-4 border-t ${theme === 'dark' ? 'border-slate-800' : 'border-slate-100'}`}>
-                      <span className="text-xs font-black uppercase tracking-widest dark:text-slate-300 text-slate-600">Net Monthly</span>
-                      <span className={`font-mono text-xl font-black ${month.net >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {month.net >= 0 ? '+' : ''}₱{month.net.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`mt-auto p-6 rounded-2xl ${theme === 'dark' ? 'bg-slate-900/40' : 'bg-slate-100/40'} border ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200/50'}`}>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Projected End Balance</span>
-                    <span className="text-2xl font-mono font-bold dark:text-white text-slate-900 leading-none">
-                      ₱{month.balance.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'prediction' && (
-          <section key="prediction" className="space-y-10 animate-in overflow-x-hidden">
-             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-8 bento-card rounded-[2.5rem] p-10 lg:p-14 min-h-[550px] flex flex-col">
-                  <div className="flex justify-between items-center mb-10">
-                    <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400 truncate">90-Day Path</h2>
-                    <span className="text-[10px] font-mono font-bold px-4 py-1.5 bg-indigo-500/10 text-indigo-500 rounded-full shrink-0 border border-indigo-500/20 uppercase tracking-widest ml-2">Prediction</span>
-                  </div>
-                  <div className="flex-grow w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={predictionData}>
-                        <defs>
-                          <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 800, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} />
-                        <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: '24px' }} formatter={(val: any) => [`₱${Number(val).toLocaleString()}`, 'Balance']}/>
-                        <Area type="monotone" dataKey="balance" stroke="#8b5cf6" strokeWidth={5} fill="url(#colorForecast)" />
-                        <Line type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} dot={{r: 6, fill: '#6366f1', strokeWidth: 3, stroke: theme === 'dark' ? '#0f172a' : '#fff'}} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                <div className="lg:col-span-4 flex flex-col gap-8 lg:gap-10">
-                   <div className="bento-card rounded-[2.5rem] p-10 dark:bg-slate-900 bg-white border border-slate-200 dark:border-slate-800 flex flex-col">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-8 truncate">Efficiency</h3>
-                      <div className="space-y-8">
-                        <div>
-                          <div className="flex justify-between text-xs font-bold mb-3 uppercase tracking-[0.2em] truncate">
-                            <span>Savings</span>
-                            <span className="text-emerald-500 ml-2">{stats.savingsRate.toFixed(1)}%</span>
-                          </div>
-                          <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 transition-all duration-1000 ease-out" style={{width: `${Math.min(100, stats.savingsRate)}%`}}></div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-xs font-bold mb-3 uppercase tracking-[0.2em] truncate">
-                            <span>Liability</span>
-                            <span className="text-indigo-500 ml-2">{stats.liquidAssets > 0 ? ((stats.totalMonthlyCommitments / stats.liquidAssets) * 100).toFixed(1) : 0}%</span>
-                          </div>
-                          <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500 transition-all duration-1000 ease-out" style={{width: `${Math.min(100, stats.liquidAssets > 0 ? (stats.totalMonthlyCommitments / stats.liquidAssets) * 100 : 0)}%`}}></div>
-                          </div>
-                        </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Type</label>
+                        <select value={txType} onChange={(e) => setTxType(e.target.value as TransactionType)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer">
+                          <option value={TransactionType.DEBIT}>Debit (Out)</option>
+                          <option value={TransactionType.CREDIT}>Credit (In)</option>
+                        </select>
                       </div>
-                   </div>
-                   <div className={`bento-card rounded-[2.5rem] p-10 border-l-[12px] ${stats.netMonthlyCashFlow >= 0 ? 'border-emerald-600' : 'border-rose-600'} flex flex-col justify-center`}>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 dark:text-slate-400 mb-6">Velocity</h3>
-                      <span className={`text-4xl xl:text-5xl font-mono font-bold ${stats.netMonthlyCashFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'} break-all`}>
-                        ₱{stats.netMonthlyCashFlow.toLocaleString()}
-                      </span>
-                   </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</label>
+                        <input type="number" placeholder="0.00" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-indigo-500 transition-all" required />
+                      </div>
+                    </div>
+                    {txType === TransactionType.CREDIT && (
+                      <div className="space-y-4 animate-in">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inbound Source</label>
+                          <select value={txRevenueId} onChange={(e) => setTxRevenueId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                            <option value="">Select source...</option>
+                            <option value="custom">+ New Income Source</option>
+                            {data.receivables.filter(r => r.status !== TransactionStatus.PAID).map(r => (
+                              <option key={r.id} value={r.id}>{r.label} (₱{r.amount.toLocaleString()})</option>
+                            ))}
+                          </select>
+                        </div>
+                        {txRevenueId === 'custom' && (
+                          <div className="space-y-1"><label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">New Source Label</label><input type="text" placeholder="e.g. Gift, Bonus..." value={txCustomRevenueLabel} onChange={(e) => setTxCustomRevenueLabel(e.target.value)} className="w-full bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-900/40 rounded-xl px-4 py-2.5 text-sm outline-none" required /></div>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source / Target Account</label>
+                      <select value={txSource} onChange={(e) => setTxSource(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                        <option value="">Select account...</option>
+                        <optgroup label="Liquid Cash">{data.accountBalances.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                        <optgroup label="Vaults">{data.savingsAccounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                      </select>
+                    </div>
+                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record Movement</button>
+                  </form>
                 </div>
-             </div>
+
+                {/* FORM 2: Settle Obligation */}
+                <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-emerald-600 shadow-xl shadow-emerald-600/5">
+                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Settle Obligation</h2>
+                  <form onSubmit={handleSettleObligation} className="space-y-6">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Obligation to Pay</label>
+                      <select value={payObligationId} onChange={(e) => setPayObligationId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                        <option value="">Pending Obligations...</option>
+                        {['loans', 'utilities', 'subscriptions', 'mandatories', 'plans', 'savingsContribution', 'otherExpenses'].map(cat => (
+                          <optgroup key={cat} label={cat.toUpperCase()}>
+                            {(data[cat as keyof DashboardData] as FinancialEntry[]).filter(o => o.status !== TransactionStatus.PAID).map(o => (
+                              <option key={o.id} value={o.id}>{o.label} (₱{o.amount.toLocaleString()})</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Asset Source</label>
+                      <select value={paySourceId} onChange={(e) => setPaySourceId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                        <option value="">Select account...</option>
+                        {data.accountBalances.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                        {data.savingsAccounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                      </select>
+                    </div>
+                    <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="xl:col-span-8 bento-card rounded-[2.5rem] p-10 flex flex-col min-h-[700px]">
+                <div className="flex justify-between items-center mb-10">
+                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Capital Ledger</h2>
+                  <div className="flex gap-4">
+                    <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-5 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
+                    <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
+                      <option value="All">All Types</option>
+                      <option value={TransactionType.CREDIT}>Credits</option>
+                      <option value={TransactionType.DEBIT}>Debits</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex-grow overflow-x-auto no-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead><tr className="border-b dark:border-slate-800 border-slate-100"><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Date</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Description</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Source</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Type</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400 text-right">Amount</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400"></th></tr></thead>
+                    <tbody className="divide-y dark:divide-slate-800/40 divide-slate-100/40">
+                      {filteredTransactions.map((tx) => (
+                        <tr key={tx.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
+                          <td className="py-5 font-mono text-[11px] text-slate-500">{tx.date}</td>
+                          <td className="py-5 text-sm font-black">{tx.description}</td>
+                          <td className="py-5"><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg">{tx.sourceLabel}</span></td>
+                          <td className="py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border ${tx.type === TransactionType.CREDIT ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{tx.type}</span></td>
+                          <td className={`py-5 text-right font-mono text-sm font-bold ${tx.type === TransactionType.CREDIT ? 'text-emerald-500' : 'text-rose-500'}`}>{tx.type === TransactionType.CREDIT ? '+' : '-'}₱{tx.amount.toLocaleString()}</td>
+                          <td className="py-5 text-right"><button onClick={() => deleteTransaction(tx.id)} className="p-2 opacity-0 group-hover:opacity-100 hover:text-rose-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
         {activeTab === 'assets' && (
-          <div key="assets" className="space-y-8 animate-in overflow-x-hidden">
-            <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-emerald-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Capital Pools</h3></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 overflow-x-hidden">
-              <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
-              <FinancialCard title="Vault Savings" totalLabel="Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
-              <FinancialCard 
-                title="Revenue" 
-                totalLabel="Unpaid" 
-                entries={data.receivables} 
-                accentColor="border-amber-500" 
-                hasStatus 
-                onAdd={(l, a) => addEntry('receivables', l, a)} 
-                onDelete={(id) => deleteEntry('receivables', id)} 
-                onUpdateStatus={(id, s) => updateStatus('receivables', id, s)} 
-                onUpdateEntry={updateEntry}
-                customTotal={stats.unpaidReceivables}
-                secondaryTotal={stats.totalReceivables}
-                secondaryTotalLabel="Overall"
-              />
-            </div>
+          <div key="assets" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 animate-in">
+            <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
+            <FinancialCard title="Vault Savings" totalLabel="Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
+            <FinancialCard title="Revenue" totalLabel="Unpaid" entries={data.receivables} accentColor="border-amber-500" hasStatus onAdd={(l, a) => addEntry('receivables', l, a)} onDelete={(id) => deleteEntry('receivables', id)} onUpdateStatus={(id, s) => updateStatus('receivables', id, s)} onUpdateEntry={updateEntry} customTotal={stats.unpaidReceivables} secondaryTotal={stats.totalReceivables} />
           </div>
         )}
 
         {activeTab === 'obligations' && (
-          <div key="obligations" className="space-y-8 animate-in overflow-x-hidden">
-            <div className="flex items-center space-x-4 px-3"><div className="w-2 h-7 bg-rose-500 rounded-full"></div><h3 className="text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">Monthly Commitments</h3></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8 overflow-x-hidden">
-              <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} secondaryTotalLabel="Overall" />
-              <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} secondaryTotalLabel="Overall" />
-            </div>
+          <div key="obligations" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in">
+            <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} />
+            <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} />
+            <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} />
+            <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} />
+            <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} />
+            <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} />
+            <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} />
           </div>
         )}
       </main>
