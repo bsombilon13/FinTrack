@@ -5,7 +5,7 @@ import FinancialCard from './components/FinancialCard';
 import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
-type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'prediction' | 'forecast';
+type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'forecast';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -76,7 +76,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<TransactionType | 'All'>('All');
   
-  // General Movement Form State
+  // Forms
   const [txDesc, setTxDesc] = useState('');
   const [txType, setTxType] = useState<TransactionType>(TransactionType.DEBIT);
   const [txAmount, setTxAmount] = useState('');
@@ -84,8 +84,6 @@ const App: React.FC = () => {
   const [txRevenueId, setTxRevenueId] = useState('');
   const [txCustomRevenueLabel, setTxCustomRevenueLabel] = useState('');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
-
-  // Obligation Payment Form State
   const [payObligationId, setPayObligationId] = useState('');
   const [paySourceId, setPaySourceId] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
@@ -104,7 +102,8 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('fintrack-data');
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          return { ...DEFAULT_DATA, ...parsed, transactions: parsed.transactions || [] };
         } catch (e) {
           console.error("Failed to parse saved financial data:", e);
         }
@@ -124,13 +123,13 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   const generateId = () => Math.random().toString(36).substr(2, 9);
-  const calculateTotal = (entries: FinancialEntry[]) => entries.reduce((a, b) => a + b.amount, 0);
+  const calculateTotal = (entries: FinancialEntry[] = []) => entries.reduce((a, b) => a + (b?.amount || 0), 0);
 
   const stats = useMemo(() => {
     const liquidCash = calculateTotal(data.accountBalances);
     const vaultSavings = calculateTotal(data.savingsAccounts);
     const totalReceivables = calculateTotal(data.receivables);
-    const unpaidReceivables = data.receivables.filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
+    const unpaidReceivables = (data.receivables || []).filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + (e.amount || 0), 0);
 
     const categoryTotals = {
       loans: calculateTotal(data.loans),
@@ -148,22 +147,21 @@ const App: React.FC = () => {
     ];
     
     const totalMonthlyCommitments = Object.values(categoryTotals).reduce((acc, val) => acc + val, 0);
-    const unpaidMonthlyCommitments = commitmentCategories.flat().filter(e => e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + e.amount, 0);
-    const totalDebtBalanceValue = data.loans.reduce((acc, e) => acc + (e.totalAmount !== undefined ? e.totalAmount : e.amount), 0);
+    const unpaidMonthlyCommitments = commitmentCategories.flat().filter(e => e && e.status !== TransactionStatus.PAID).reduce((acc, e) => acc + (e.amount || 0), 0);
+    const totalDebtBalanceValue = (data.loans || []).reduce((acc, e) => acc + (e.totalAmount !== undefined ? e.totalAmount : (e.amount || 0)), 0);
 
     const deployableFunds = (liquidCash + unpaidReceivables) - unpaidMonthlyCommitments;
     const liquidAssets = liquidCash + unpaidReceivables;
     const netMonthlyCashFlow = (liquidCash + totalReceivables) - totalMonthlyCommitments;
     const safetyFactorValue = totalMonthlyCommitments > 0 ? (liquidCash / totalMonthlyCommitments) * 100 : 0;
     
-    const savingsAllocation = calculateTotal(data.savingsContribution);
-    const savingsRate = liquidAssets > 0 ? (savingsAllocation / liquidAssets) * 100 : 0;
+    const totalAssets = liquidCash + vaultSavings + totalReceivables;
 
     return {
       liquidCash, totalReceivables, unpaidReceivables, vaultSavings, liquidAssets,
       totalMonthlyCommitments, unpaidMonthlyCommitments, deployableFunds,
-      netMonthlyCashFlow, safetyFactorValue, savingsAllocation, savingsRate,
-      totalDebtBalanceValue, categoryTotals
+      netMonthlyCashFlow, safetyFactorValue, totalDebtBalanceValue, categoryTotals,
+      totalAssets
     };
   }, [data]);
 
@@ -171,16 +169,39 @@ const App: React.FC = () => {
     const now = new Date();
     const months = [];
     let currentBalance = stats.liquidCash;
+    
     for (let i = 0; i < 6; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const inflow = i === 0 ? stats.unpaidReceivables : (stats.unpaidReceivables * 0.5);
+      const name = date.toLocaleString('default', { month: 'short' });
+      const fullName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      
+      const inflow = i === 0 ? stats.unpaidReceivables : (stats.unpaidReceivables * 0.4); 
       const outflow = stats.totalMonthlyCommitments;
       const net = inflow - outflow;
       currentBalance += net;
-      months.push({ id: i, name: date.toLocaleString('default', { month: 'long', year: 'numeric' }), inflow, outflow, net, balance: currentBalance });
+
+      months.push({ 
+        id: i, 
+        name, 
+        fullName, 
+        inflow: Math.max(0, inflow), 
+        outflow: Math.max(0, outflow), 
+        net, 
+        balance: currentBalance 
+      });
     }
     return months;
   }, [stats]);
+
+  const filteredTransactions = useMemo(() => {
+    return (data.transactions || []).filter(tx => {
+      const matchesSearch = 
+        tx.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        tx.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = filterType === 'All' || tx.type === filterType;
+      return matchesSearch && matchesType;
+    });
+  }, [data.transactions, searchQuery, filterType]);
 
   const handleExportPdf = async () => {
     setIsExporting(true);
@@ -197,15 +218,15 @@ const App: React.FC = () => {
 
   const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number) => {
     const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID };
-    setData(prev => ({ ...prev, [section]: [...(prev[section] as any[]), newEntry] }));
+    setData(prev => ({ ...prev, [section]: [...(Array.isArray(prev[section]) ? prev[section] : []), newEntry] }));
   };
 
   const deleteEntry = (section: keyof DashboardData, id: string) => {
-    setData(prev => ({ ...prev, [section]: (prev[section] as any[]).filter((e: any) => e.id !== id) }));
+    setData(prev => ({ ...prev, [section]: (Array.isArray(prev[section]) ? prev[section] : []).filter((e: any) => e.id !== id) }));
   };
 
   const updateStatus = (section: keyof DashboardData, id: string, status: TransactionStatus) => {
-    setData(prev => ({ ...prev, [section]: (prev[section] as any[]).map((e: any) => e.id === id ? { ...e, status } : e) }));
+    setData(prev => ({ ...prev, [section]: (Array.isArray(prev[section]) ? prev[section] : []).map((e: any) => e.id === id ? { ...e, status } : e) }));
   };
 
   const updateEntry = (id: string, label: string, amount: number, totalAmount?: number) => {
@@ -225,7 +246,7 @@ const App: React.FC = () => {
     const amount = parseFloat(txAmount);
     if (!txDesc || isNaN(amount) || !txSource) return;
 
-    const sourceEntry = [...data.accountBalances, ...data.savingsAccounts].find(a => a.id === txSource);
+    const sourceEntry = [...(data.accountBalances || []), ...(data.savingsAccounts || [])].find(a => a.id === txSource);
     if (!sourceEntry) return;
 
     const newTx: Transaction = {
@@ -235,7 +256,7 @@ const App: React.FC = () => {
 
     setData(prev => {
       const updated = { ...prev };
-      const updateAsset = (entries: FinancialEntry[]) => 
+      const updateAsset = (entries: FinancialEntry[] = []) => 
         entries.map(e => e.id === txSource 
           ? { ...e, amount: txType === TransactionType.CREDIT ? e.amount + amount : e.amount - amount } 
           : e
@@ -247,16 +268,14 @@ const App: React.FC = () => {
       if (txType === TransactionType.CREDIT) {
         if (txRevenueId === 'custom' && txCustomRevenueLabel) {
           const newRevenue: FinancialEntry = { id: generateId(), label: txCustomRevenueLabel, amount, status: TransactionStatus.PAID };
-          updated.receivables = [newRevenue, ...prev.receivables];
+          updated.receivables = [newRevenue, ...(prev.receivables || [])];
         } else if (txRevenueId) {
-          updated.receivables = prev.receivables.map(r => r.id === txRevenueId ? { ...r, status: TransactionStatus.PAID } : r);
+          updated.receivables = (prev.receivables || []).map(r => r.id === txRevenueId ? { ...r, status: TransactionStatus.PAID } : r);
         }
       }
-
-      updated.transactions = [newTx, ...prev.transactions];
+      updated.transactions = [newTx, ...(prev.transactions || [])];
       return updated;
     });
-
     setTxDesc(''); setTxAmount(''); setTxSource(''); setTxRevenueId(''); setTxCustomRevenueLabel('');
   };
 
@@ -264,12 +283,12 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!payObligationId || !paySourceId) return;
 
-    const sourceEntry = [...data.accountBalances, ...data.savingsAccounts].find(a => a.id === paySourceId);
+    const sourceEntry = [...(data.accountBalances || []), ...(data.savingsAccounts || [])].find(a => a.id === paySourceId);
     const obligationCategories: Array<keyof DashboardData> = ['loans', 'subscriptions', 'savingsContribution', 'utilities', 'plans', 'mandatories', 'otherExpenses'];
     
     let targetObligation: FinancialEntry | undefined;
     for (const cat of obligationCategories) {
-      targetObligation = (data[cat] as FinancialEntry[]).find(o => o.id === payObligationId);
+      targetObligation = (data[cat] as FinancialEntry[] || []).find(o => o.id === payObligationId);
       if (targetObligation) break;
     }
 
@@ -285,65 +304,44 @@ const App: React.FC = () => {
 
     setData(prev => {
       const updated = { ...prev };
-      const updateAsset = (entries: FinancialEntry[]) => entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
+      const updateAsset = (entries: FinancialEntry[] = []) => entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
       updated.accountBalances = updateAsset(prev.accountBalances);
       updated.savingsAccounts = updateAsset(prev.savingsAccounts);
 
       obligationCategories.forEach(cat => {
-        updated[cat] = (prev[cat] as FinancialEntry[]).map(o => o.id === payObligationId ? { ...o, status: TransactionStatus.PAID } : o) as any;
+        updated[cat] = (prev[cat] as FinancialEntry[] || []).map(o => o.id === payObligationId ? { ...o, status: TransactionStatus.PAID } : o) as any;
       });
-
-      updated.transactions = [newTx, ...prev.transactions];
+      updated.transactions = [newTx, ...(prev.transactions || [])];
       return updated;
     });
-
     setPayObligationId(''); setPaySourceId('');
   };
 
   const deleteTransaction = (id: string) => {
-    const tx = data.transactions.find(t => t.id === id);
+    const tx = (data.transactions || []).find(t => t.id === id);
     if (!tx) return;
     setData(prev => {
-      const reverse = (entries: FinancialEntry[]) => entries.map(e => e.id === tx.sourceId ? { ...e, amount: tx.type === TransactionType.CREDIT ? e.amount - tx.amount : e.amount + tx.amount } : e);
-      return { ...prev, accountBalances: reverse(prev.accountBalances), savingsAccounts: reverse(prev.savingsAccounts), transactions: prev.transactions.filter(t => t.id !== id) };
+      const reverse = (entries: FinancialEntry[] = []) => entries.map(e => e.id === tx.sourceId ? { ...e, amount: tx.type === TransactionType.CREDIT ? e.amount - tx.amount : e.amount + tx.amount } : e);
+      return { ...prev, accountBalances: reverse(prev.accountBalances), savingsAccounts: reverse(prev.savingsAccounts), transactions: (prev.transactions || []).filter(t => t.id !== id) };
     });
   };
-
-  const filteredTransactions = useMemo(() => {
-    return data.transactions.filter(t => {
-      const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesFilter = filterType === 'All' || t.type === filterType;
-      return matchesSearch && matchesFilter;
-    });
-  }, [data.transactions, searchQuery, filterType]);
-
-  const predictionData = useMemo(() => {
-    const monthlyNet = stats.netMonthlyCashFlow;
-    const months = [];
-    for(let i=0; i<=3; i++) {
-      const date = new Date(new Date().getFullYear(), new Date().getMonth() + i, 1);
-      months.push({ name: i === 0 ? "Current" : date.toLocaleString('default', { month: 'short' }), balance: stats.liquidCash + (monthlyNet * i) });
-    }
-    return months;
-  }, [stats]);
 
   const TABS: TabConfig[] = [
     { id: 'overview', label: 'Overview', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> },
     { id: 'assets', label: 'Assets', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> },
     { id: 'obligations', label: 'Obligations', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg> },
     { id: 'transactions', label: 'Transactions', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg> },
-    { id: 'prediction', label: 'Analysis', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> },
     { id: 'forecast', label: 'Forecast', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> }
   ];
 
   return (
-    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500/30 transition-colors duration-500">
+    <div className="min-h-screen dark:bg-slate-950 bg-slate-50 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-500">
       <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-center border-b dark:border-slate-900 border-slate-200 sticky top-0 z-50 dark:bg-slate-950/80 bg-white/90 backdrop-blur-xl gap-6">
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 shrink-0">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30">
             <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
           </div>
-          <div><h1 className="text-2xl font-black tracking-tight leading-none">FinTrack Pro</h1><span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] mt-2 block">Management Suite</span></div>
+          <div><h1 className="text-2xl font-black tracking-tight leading-none">FinTrack Pro</h1><span className="text-[10px] text-slate-500 uppercase tracking-widest mt-2 block">Management Suite</span></div>
         </div>
         <nav className="flex flex-col md:flex-row dark:bg-slate-900/60 bg-slate-100/60 p-1.5 rounded-2xl border dark:border-slate-800 border-slate-200 gap-1">
           {TABS.map((tab) => (
@@ -352,58 +350,146 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
-        <div className="flex items-center space-x-4 shrink-0">
-          <button onClick={handleExportPdf} disabled={isExporting} className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        <div className="flex items-center space-x-4">
+          <button onClick={handleExportPdf} disabled={isExporting} className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
             <span>{isExporting ? 'Generating...' : 'Export PDF'}</span>
           </button>
-          <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200 text-slate-500 hover:text-indigo-600 transition-all">
-            {theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>}
+          <button onClick={toggleTheme} className="p-3 rounded-xl dark:bg-slate-900 bg-white border dark:border-slate-800 border-slate-200">
+            {theme === 'dark' ? '☀️' : '🌙'}
           </button>
         </div>
       </header>
 
       <main className="max-w-[1720px] mx-auto p-4 md:p-12 space-y-12 pb-32">
         {activeTab === 'overview' && (
-          <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-8 animate-in">
-            <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              <div className={`bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] ${stats.deployableFunds >= 0 ? 'border-indigo-600' : 'border-rose-600'}`}>
-                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Deployable Funds</span><InfoTooltip formula="(Liquid + Unpaid Rev) - Unpaid Commitments" /></div>
-                <span className={`text-5xl font-mono font-bold tracking-tighter ${stats.deployableFunds >= 0 ? '' : 'text-rose-600'}`}>₱{stats.deployableFunds.toLocaleString()}</span>
+          <section key="overview" className="space-y-10 animate-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className={`bento-card rounded-[2.5rem] px-10 py-7 border-t-[10px] ${stats.deployableFunds >= 0 ? 'border-indigo-600' : 'border-rose-600'}`}>
+                <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Deployable Funds</span><InfoTooltip formula="(Liquid + Unpaid Rev) - Unpaid Commitments" /></div>
+                <span className={`text-4xl font-mono font-bold tracking-tighter ${stats.deployableFunds >= 0 ? '' : 'text-rose-600'}`}>₱{stats.deployableFunds.toLocaleString()}</span>
               </div>
-              <div className="bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] border-slate-400">
-                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Net Flow Total Out</span><InfoTooltip formula="Sum of all monthly overhead requirements" /></div>
-                <span className="text-5xl font-mono font-bold tracking-tighter">₱{stats.totalMonthlyCommitments.toLocaleString()}</span>
+              <div className="bento-card rounded-[2.5rem] px-10 py-7 border-t-[10px] border-slate-400">
+                <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Net Flow Total Out</span><InfoTooltip formula="Sum of all monthly overhead requirements" /></div>
+                <span className="text-4xl font-mono font-bold tracking-tighter">₱{stats.totalMonthlyCommitments.toLocaleString()}</span>
               </div>
-              <div className={`bento-card rounded-[2.5rem] px-10 py-6 border-t-[10px] ${stats.safetyFactorValue >= 100 ? 'border-emerald-600' : 'border-rose-600'}`}>
-                <div className="flex items-center mb-6"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em]">Safety Factor</span><InfoTooltip formula="(Liquid Cash / Monthly Needs) * 100" /></div>
-                <span className={`text-5xl font-mono font-bold tracking-tighter ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : 'text-rose-600'}`}>{stats.safetyFactorValue.toFixed(0)}%</span>
-              </div>
-            </div>
-            <div className="md:col-span-12 lg:col-span-8 bento-card rounded-[3rem] p-12 h-[550px] flex flex-col">
-              <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-12">Capital Benchmarks</h2>
-              <div className="flex-grow w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={categoryChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} tickFormatter={(v) => `₱${(v/1000)}k`} />
-                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', borderRadius: '16px' }} />
-                    <Bar dataKey="amount" radius={[10, 10, 0, 0]} barSize={60} fill="#6366f1" />
-                    <Line dataKey="avg" stroke="#f43f5e" strokeWidth={4} dot={{ r: 6, fill: '#f43f5e' }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div className={`bento-card rounded-[2.5rem] px-10 py-7 border-t-[10px] ${stats.safetyFactorValue >= 100 ? 'border-emerald-600' : 'border-rose-600'}`}>
+                <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Safety Factor</span><InfoTooltip formula="(Liquid Cash / Monthly Needs) * 100" /></div>
+                <span className={`text-4xl font-mono font-bold tracking-tighter ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : 'text-rose-600'}`}>{stats.safetyFactorValue.toFixed(0)}%</span>
               </div>
             </div>
-            <div className="md:col-span-12 lg:col-span-4 flex flex-col gap-8">
-              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-emerald-600 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 block">Vault Balance</span>
-                <span className="text-4xl font-mono font-bold text-emerald-500">₱{stats.vaultSavings.toLocaleString()}</span>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-8 bento-card rounded-[3rem] p-12 h-[600px] flex flex-col">
+                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-12">Capital Benchmarks</h2>
+                <div className="flex-grow w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={categoryChartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} tickFormatter={(v) => `₱${(v/1000)}k`} />
+                      <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', borderRadius: '16px' }} />
+                      <Bar dataKey="amount" radius={[10, 10, 0, 0]} barSize={60} fill="#6366f1" />
+                      <Line dataKey="avg" stroke="#f43f5e" strokeWidth={4} dot={{ r: 6, fill: '#f43f5e' }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="bento-card rounded-[2.5rem] p-10 border-l-[10px] border-rose-600 flex flex-col justify-center">
-                <span className="text-[11px] font-black text-rose-500 uppercase tracking-[0.3em] mb-4 block">Total Liabilities</span>
-                <span className="text-4xl font-mono font-bold">₱{stats.totalDebtBalanceValue.toLocaleString()}</span>
+
+              <div className="lg:col-span-4 flex flex-col gap-6">
+                <div className="bento-card rounded-[2.5rem] px-8 py-7 border-l-[10px] border-emerald-500 flex-grow flex flex-col justify-center">
+                  <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Vault Savings</span><InfoTooltip formula="Total amount stashed in savings accounts" /></div>
+                  <span className="text-4xl font-mono font-bold tracking-tighter text-emerald-500">₱{stats.vaultSavings.toLocaleString()}</span>
+                  <p className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-widest">Reserved & Secured Reserves</p>
+                </div>
+                <div className="bento-card rounded-[2.5rem] px-8 py-7 border-l-[10px] border-amber-500 flex-grow flex flex-col justify-center">
+                  <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Total Revenue</span><InfoTooltip formula="Aggregate of all receivables (paid & pending)" /></div>
+                  <span className="text-4xl font-mono font-bold tracking-tighter text-amber-500">₱{stats.totalReceivables.toLocaleString()}</span>
+                  <p className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-widest">Projected Realizable Inflow</p>
+                </div>
+                <div className="bento-card rounded-[2.5rem] px-8 py-7 border-l-[10px] border-rose-600 flex-grow flex flex-col justify-center">
+                  <div className="flex items-center mb-4"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Total Liabilities</span><InfoTooltip formula="Total combined amount of all monthly obligations" /></div>
+                  <span className="text-4xl font-mono font-bold tracking-tighter text-rose-600">₱{stats.totalMonthlyCommitments.toLocaleString()}</span>
+                  <p className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-widest">Cumulative Overhead Debt</p>
+                </div>
               </div>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'forecast' && (
+          <section key="forecast" className="space-y-12 animate-in">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+              <div className="lg:col-span-8 bento-card rounded-[3rem] p-12 h-[550px] flex flex-col relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8">
+                  <div className="text-right">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 block mb-1">Estimated End-of-Run</span>
+                    <span className="text-3xl font-mono font-bold text-indigo-500">₱{detailedForecast[detailedForecast.length - 1].balance.toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="mb-10">
+                  <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Balance Trajectory</h2>
+                  <p className="text-[11px] text-slate-400 font-bold uppercase mt-1 tracking-widest">Projected liquidity over next 6 months</p>
+                </div>
+                <div className="flex-grow w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={detailedForecast}>
+                      <defs>
+                        <linearGradient id="colorBal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#e2e8f0'} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: theme === 'dark' ? '#94a3b8' : '#64748b'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} tickFormatter={(v) => `₱${(v/1000)}k`} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', border: 'none', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} 
+                        formatter={(val) => `₱${Number(val).toLocaleString()}`}
+                      />
+                      <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={4} fillOpacity={1} fill="url(#colorBal)" dot={{ r: 4, fill: '#6366f1' }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="lg:col-span-4 flex flex-col gap-6">
+                <div className="bento-card rounded-[2.5rem] p-8 border-l-[10px] border-emerald-500 h-full flex flex-col justify-center">
+                   <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-4">Monthly Potential Gain</h3>
+                   <span className="text-4xl font-mono font-bold text-emerald-500">₱{Math.max(0, stats.netMonthlyCashFlow).toLocaleString()}</span>
+                   <p className="text-[11px] text-slate-400 mt-4 leading-relaxed font-medium uppercase tracking-wider">Estimated monthly surplus after all obligations and income realizations.</p>
+                </div>
+                <div className="bento-card rounded-[2.5rem] p-8 border-l-[10px] border-rose-500 h-full flex flex-col justify-center">
+                   <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-4">Risk Exposure</h3>
+                   <span className="text-4xl font-mono font-bold text-rose-500">₱{stats.unpaidMonthlyCommitments.toLocaleString()}</span>
+                   <p className="text-[11px] text-slate-400 mt-4 leading-relaxed font-medium uppercase tracking-wider">Total capital required to settle all active pending monthly obligations.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {detailedForecast.map((month) => (
+                <div key={month.id} className="bento-card rounded-[3rem] p-8 lg:p-10 flex flex-col relative overflow-hidden group hover:scale-[1.02] transition-all">
+                  <div className="flex justify-between items-center mb-8">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">{month.fullName}</span>
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase ${month.net >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                      {month.net >= 0 ? 'Surplus' : 'Deficit'}
+                    </span>
+                  </div>
+                  <div className="space-y-6 mb-10">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Est. Inbound</span>
+                      <span className="font-mono text-base font-bold text-emerald-500">+₱{month.inflow.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Est. Outbound</span>
+                      <span className="font-mono text-base font-bold text-rose-500">-₱{month.outflow.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={`mt-auto p-6 rounded-2xl ${theme === 'dark' ? 'bg-slate-900/40' : 'bg-slate-100/40'} border ${theme === 'dark' ? 'border-slate-800/50' : 'border-slate-200/50'}`}>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Projected End Balance</span>
+                    <span className="text-2xl font-mono font-bold leading-none">₱{month.balance.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}
@@ -412,7 +498,6 @@ const App: React.FC = () => {
           <section key="transactions" className="space-y-10 animate-in">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
               <div className="xl:col-span-4 flex flex-col gap-8">
-                {/* FORM 1: Record Movement */}
                 <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-indigo-600 shadow-xl shadow-indigo-600/5">
                   <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Record Movement</h2>
                   <form onSubmit={handleAddGeneralMovement} className="space-y-6">
@@ -440,7 +525,7 @@ const App: React.FC = () => {
                           <select value={txRevenueId} onChange={(e) => setTxRevenueId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                             <option value="">Select source...</option>
                             <option value="custom">+ New Income Source</option>
-                            {data.receivables.filter(r => r.status !== TransactionStatus.PAID).map(r => (
+                            {(data.receivables || []).filter(r => r.status !== TransactionStatus.PAID).map(r => (
                               <option key={r.id} value={r.id}>{r.label} (₱{r.amount.toLocaleString()})</option>
                             ))}
                           </select>
@@ -454,15 +539,14 @@ const App: React.FC = () => {
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source / Target Account</label>
                       <select value={txSource} onChange={(e) => setTxSource(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                         <option value="">Select account...</option>
-                        <optgroup label="Liquid Cash">{data.accountBalances.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
-                        <optgroup label="Vaults">{data.savingsAccounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                        <optgroup label="Liquid Cash">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                        <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
                       </select>
                     </div>
                     <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record Movement</button>
                   </form>
                 </div>
 
-                {/* FORM 2: Settle Obligation */}
                 <div className="bento-card rounded-[2.5rem] p-8 border-t-[10px] border-emerald-600 shadow-xl shadow-emerald-600/5">
                   <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Settle Obligation</h2>
                   <form onSubmit={handleSettleObligation} className="space-y-6">
@@ -472,7 +556,7 @@ const App: React.FC = () => {
                         <option value="">Pending Obligations...</option>
                         {['loans', 'utilities', 'subscriptions', 'mandatories', 'plans', 'savingsContribution', 'otherExpenses'].map(cat => (
                           <optgroup key={cat} label={cat.toUpperCase()}>
-                            {(data[cat as keyof DashboardData] as FinancialEntry[]).filter(o => o.status !== TransactionStatus.PAID).map(o => (
+                            {(data[cat as keyof DashboardData] as FinancialEntry[] || []).filter(o => o.status !== TransactionStatus.PAID).map(o => (
                               <option key={o.id} value={o.id}>{o.label} (₱{o.amount.toLocaleString()})</option>
                             ))}
                           </optgroup>
@@ -483,8 +567,8 @@ const App: React.FC = () => {
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Asset Source</label>
                       <select value={paySourceId} onChange={(e) => setPaySourceId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                         <option value="">Select account...</option>
-                        {data.accountBalances.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                        {data.savingsAccounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                        {(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                        {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                       </select>
                     </div>
                     <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
@@ -528,21 +612,21 @@ const App: React.FC = () => {
 
         {activeTab === 'assets' && (
           <div key="assets" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 animate-in">
-            <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
-            <FinancialCard title="Vault Savings" totalLabel="Stashed" entries={data.savingsAccounts} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
-            <FinancialCard title="Revenue" totalLabel="Unpaid" entries={data.receivables} accentColor="border-amber-500" hasStatus onAdd={(l, a) => addEntry('receivables', l, a)} onDelete={(id) => deleteEntry('receivables', id)} onUpdateStatus={(id, s) => updateStatus('receivables', id, s)} onUpdateEntry={updateEntry} customTotal={stats.unpaidReceivables} secondaryTotal={stats.totalReceivables} />
+            <FinancialCard title="Liquid Cash" totalLabel="Available" entries={data.accountBalances || []} accentColor="border-indigo-600" onAdd={(l, a) => addEntry('accountBalances', l, a)} onDelete={(id) => deleteEntry('accountBalances', id)} onUpdateEntry={updateEntry} />
+            <FinancialCard title="Vault Savings" totalLabel="Stashed" entries={data.savingsAccounts || []} accentColor="border-emerald-500" onAdd={(l, a) => addEntry('savingsAccounts', l, a)} onDelete={(id) => deleteEntry('savingsAccounts', id)} onUpdateEntry={updateEntry} />
+            <FinancialCard title="Revenue" totalLabel="Unpaid" entries={data.receivables || []} accentColor="border-amber-500" hasStatus onAdd={(l, a) => addEntry('receivables', l, a)} onDelete={(id) => deleteEntry('receivables', id)} onUpdateStatus={(id, s) => updateStatus('receivables', id, s)} onUpdateEntry={updateEntry} customTotal={stats.unpaidReceivables} secondaryTotal={stats.totalReceivables} />
           </div>
         )}
 
         {activeTab === 'obligations' && (
           <div key="obligations" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in">
-            <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} />
-            <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} />
-            <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} />
-            <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} />
-            <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} />
-            <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} />
-            <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} />
+            <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans || []} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} />
+            <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities || []} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} />
+            <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories || []} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} />
+            <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions || []} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} />
+            <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans || []} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} />
+            <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution || []} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} />
+            <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses || []} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} />
           </div>
         )}
       </main>
