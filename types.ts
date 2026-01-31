@@ -8,7 +8,8 @@ export enum TransactionStatus {
 export interface FinancialEntry {
   id: string;
   label: string;
-  amount: number;
+  amount: number; // This represents the Monthly Payable
+  totalAmount?: number; // This represents the Total Debt balance
   status?: TransactionStatus;
 }
 
@@ -23,6 +24,7 @@ export interface DashboardData {
   accountBalances: FinancialEntry[];
   receivables: FinancialEntry[];
   loans: FinancialEntry[];
+  payables: FinancialEntry[];
   subscriptions: FinancialEntry[];
   savingsContribution: FinancialEntry[];
   utilities: FinancialEntry[];

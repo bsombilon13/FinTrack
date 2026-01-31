@@ -5,13 +5,14 @@ import { FinancialEntry, TransactionStatus } from '../types';
 interface FinancialCardProps {
   title: string;
   entries: FinancialEntry[];
-  onAdd: (label: string, amount: number) => void;
+  onAdd: (label: string, amount: number, totalAmount?: number) => void;
   onDelete: (id: string) => void;
   onUpdateStatus?: (id: string, status: TransactionStatus) => void;
-  onUpdateEntry: (id: string, label: string, amount: number) => void;
+  onUpdateEntry: (id: string, label: string, amount: number, totalAmount?: number) => void;
   totalLabel: string;
   accentColor?: string;
   hasStatus?: boolean;
+  isDebt?: boolean;
 }
 
 const FinancialCard: React.FC<FinancialCardProps> = ({
@@ -23,14 +24,17 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
   onUpdateEntry,
   totalLabel,
   accentColor = "border-slate-300 dark:border-slate-700",
-  hasStatus = false
+  hasStatus = false,
+  isDebt = false
 }) => {
   const [newLabel, setNewLabel] = useState('');
   const [newAmount, setNewAmount] = useState('');
+  const [newTotalAmount, setNewTotalAmount] = useState('');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  const [editTotalAmount, setEditTotalAmount] = useState('');
   
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -46,10 +50,13 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(newAmount);
+    const totalAmount = isDebt ? parseFloat(newTotalAmount) : undefined;
+    
     if (newLabel.trim() !== '' && !isNaN(amount) && amount >= 0) {
-      onAdd(newLabel.trim(), amount);
+      onAdd(newLabel.trim(), amount, totalAmount);
       setNewLabel('');
       setNewAmount('');
+      setNewTotalAmount('');
     }
   };
 
@@ -57,6 +64,7 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
     setEditingId(entry.id);
     setEditLabel(entry.label);
     setEditAmount(entry.amount.toString());
+    setEditTotalAmount(entry.totalAmount?.toString() || '');
     resetConfirmations();
   };
 
@@ -64,12 +72,15 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
     setEditingId(null);
     setEditLabel('');
     setEditAmount('');
+    setEditTotalAmount('');
   };
 
   const saveEdit = (id: string) => {
     const amount = parseFloat(editAmount);
+    const totalAmount = isDebt ? parseFloat(editTotalAmount) : undefined;
+    
     if (editLabel.trim() !== '' && !isNaN(amount) && amount >= 0) {
-      onUpdateEntry(id, editLabel.trim(), amount);
+      onUpdateEntry(id, editLabel.trim(), amount, totalAmount);
       setEditingId(null);
       setJustSavedId(id);
     }
@@ -134,14 +145,28 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     value={editLabel}
                     onChange={(e) => setEditLabel(e.target.value)}
                     className="w-full bg-white dark:bg-slate-950 border-2 border-indigo-500 rounded-lg px-3 py-2 text-sm dark:text-slate-100 text-slate-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all"
-                    placeholder="E.g. Rent, Freelance Payment"
+                    placeholder="E.g. Bank Loan"
                     required
                     autoFocus
                   />
                 </div>
-                <div className="flex items-end space-x-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {isDebt && (
+                    <div className="relative">
+                      <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">Total Debt</label>
+                      <input 
+                        type="number" 
+                        value={editTotalAmount}
+                        onChange={(e) => setEditTotalAmount(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-950 border-2 border-indigo-500 rounded-lg px-3 py-2 text-sm dark:text-slate-100 text-slate-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all font-mono"
+                        placeholder="0.00"
+                        min="0"
+                        step="any"
+                      />
+                    </div>
+                  )}
                   <div className="relative flex-grow">
-                    <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">Amount</label>
+                    <label className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 block mb-1 uppercase tracking-wider">{isDebt ? 'Monthly Pay' : 'Amount'}</label>
                     <input 
                       type="number" 
                       value={editAmount}
@@ -153,19 +178,19 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                       required
                     />
                   </div>
-                  <button 
+                </div>
+                <div className="flex justify-end space-x-2">
+                   <button 
                     onClick={() => saveEdit(entry.id)} 
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white p-2.5 rounded-lg shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-                    aria-label="Save changes"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all text-xs font-bold uppercase tracking-widest"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                    Save
                   </button>
                   <button 
                     onClick={cancelEditing} 
-                    className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 p-2.5 rounded-lg transition-all hover:bg-slate-300 dark:hover:bg-slate-700"
-                    aria-label="Cancel editing"
+                    className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-4 py-2 rounded-lg transition-all hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold uppercase tracking-widest"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -179,24 +204,32 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
                     <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{entry.label}</span>
                     {justSavedId === entry.id && (
                       <span className="ml-2 animate-bounce">
-                        <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
+                        <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414-1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
                       </span>
                     )}
                   </div>
-                  {hasStatus && (
-                    <span className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${
-                      entry.status === TransactionStatus.PAID ? 'text-emerald-600 dark:text-emerald-400' : 
-                      entry.status === TransactionStatus.PENDING ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
-                    }`}>
-                      {entry.status}
-                    </span>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    {isDebt && entry.totalAmount !== undefined && (
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Total: ₱{entry.totalAmount.toLocaleString()}</span>
+                    )}
+                    {hasStatus && (
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                        entry.status === TransactionStatus.PAID ? 'text-emerald-600 dark:text-emerald-400' : 
+                        entry.status === TransactionStatus.PENDING ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                      }`}>
+                        {entry.status}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center space-x-3">
-                  <span className={`font-mono text-sm font-bold transition-all ${confirmingDeleteId === entry.id || confirmingStatusId === entry.id ? 'opacity-30 blur-[2px]' : 'opacity-100'} ${justSavedId === entry.id ? 'text-emerald-500' : 'dark:text-slate-100 text-slate-900'}`}>
-                    ₱{entry.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`font-mono text-sm font-bold transition-all ${confirmingDeleteId === entry.id || confirmingStatusId === entry.id ? 'opacity-30 blur-[2px]' : 'opacity-100'} ${justSavedId === entry.id ? 'text-emerald-500' : 'dark:text-slate-100 text-slate-900'}`}>
+                      ₱{entry.amount.toLocaleString()}
+                    </span>
+                    {isDebt && <span className="text-[9px] text-slate-400 font-bold uppercase">Monthly</span>}
+                  </div>
                   
                   <div className="flex items-center space-x-1">
                     {hasStatus && onUpdateStatus && (
@@ -260,20 +293,33 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
             className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-medium dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
             required
           />
-          <div className="flex space-x-2">
-            <input 
-              type="number" 
-              placeholder="0.00" 
-              value={newAmount}
-              onChange={(e) => setNewAmount(e.target.value)}
-              className="flex-grow bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
-              min="0"
-              step="any"
-              required
-            />
-            <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded-lg transition-all shadow-md shadow-indigo-600/20 flex-shrink-0 active:scale-95 font-bold text-xs uppercase tracking-widest">
-              Add
-            </button>
+          <div className="flex flex-col space-y-2">
+            {isDebt && (
+              <input 
+                type="number" 
+                placeholder="Total Debt Amount" 
+                value={newTotalAmount}
+                onChange={(e) => setNewTotalAmount(e.target.value)}
+                className="flex-grow bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                min="0"
+                step="any"
+              />
+            )}
+            <div className="flex space-x-2">
+              <input 
+                type="number" 
+                placeholder={isDebt ? "Monthly Payable" : "0.00"} 
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                className="flex-grow bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono dark:text-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
+                min="0"
+                step="any"
+                required
+              />
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded-lg transition-all shadow-md shadow-indigo-600/20 flex-shrink-0 active:scale-95 font-bold text-xs uppercase tracking-widest">
+                Add
+              </button>
+            </div>
           </div>
         </form>
         
