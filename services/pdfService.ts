@@ -8,6 +8,7 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const primaryColor = [99, 102, 241]; 
 
+  // Page 1 Header
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, 210, 40, 'F');
   
@@ -21,6 +22,7 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
   doc.text(`Generated on ${dateStr}`, 15, 33);
   doc.text("Proprietary Financial Strategy Dashboard", 140, 33);
 
+  // Executive Summary
   doc.setTextColor(50, 50, 50);
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
@@ -44,7 +46,10 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
     margin: { left: 15, right: 15 }
   });
 
+  // Assets Inventory
   const startAssets = (doc.lastAutoTable?.finalY || 100) + 15;
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
   doc.text("Asset Inventory", 15, startAssets);
 
   const assetRows: any[] = [];
@@ -61,7 +66,9 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
     margin: { left: 15, right: 15 }
   });
 
+  // Page 2: Obligations & Forecast
   doc.addPage();
+  doc.setTextColor(50, 50, 50);
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
   doc.text("Monthly Obligations Matrix", 15, 20);
@@ -89,6 +96,8 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
   });
 
   const startForecast = (doc.lastAutoTable?.finalY || 100) + 20;
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
   doc.text("6-Month Strategic Forecast", 15, startForecast);
 
   const forecastRows = (forecast || []).map(f => [
@@ -108,6 +117,37 @@ export const generateFinancialReport = async (data: DashboardData, stats: any, f
     margin: { left: 15, right: 15 }
   });
 
+  // Page 3: Transaction Ledger
+  doc.addPage();
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.text("Transaction Ledger", 15, 20);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text("Full history of recorded capital movements and payments.", 15, 28);
+
+  const transactionRows = (data.transactions || []).map(tx => [
+    tx.date,
+    tx.description,
+    tx.sourceLabel,
+    tx.type,
+    `PHP ${tx.amount.toLocaleString()}`
+  ]);
+
+  doc.autoTable({
+    startY: 35,
+    head: [["Date", "Description", "Source Account", "Type", "Amount"]],
+    body: transactionRows,
+    theme: 'striped',
+    headStyles: { fillColor: [71, 85, 105] }, // Neutral slate for ledger
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 15, right: 15 },
+    columnStyles: {
+      4: { halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  // Footer Branding & Page Numbers
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
