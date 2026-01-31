@@ -312,51 +312,51 @@ const App: React.FC = () => {
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
             <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
-              <div className={`bento-card rounded-[3.5rem] p-10 lg:p-14 flex flex-col justify-center min-h-[250px] lg:min-h-[320px] relative border-t-[12px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-2xl shadow-indigo-600/10' : 'border-rose-600 shadow-2xl shadow-rose-600/10'}`}>
+              <div className={`bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-2xl shadow-indigo-600/10' : 'border-rose-600 shadow-2xl shadow-rose-600/10'}`}>
                 <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-10">
+                <div className="flex items-center mb-6">
                   <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Deployable Funds</span>
                   <InfoTooltip formula="(Liquid Cash + Unpaid Receivables) - Unpaid Commitments. Your true spending capacity." />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className={`text-5xl sm:text-6xl lg:text-7xl font-mono font-bold tracking-tighter leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-950' : 'text-rose-600'}`}>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter leading-none ${stats.deployableFunds >= 0 ? 'dark:text-white text-slate-950' : 'text-rose-600'}`}>
                     ₱{stats.deployableFunds.toLocaleString()}
                   </span>
-                  <div className="mt-4 flex items-center space-x-2">
+                  <div className="mt-3 flex items-center space-x-2">
                     <div className={`w-2 h-2 rounded-full ${stats.deployableFunds >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`}></div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Liquidity Profile</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bento-card rounded-[3.5rem] p-10 lg:p-14 flex flex-col justify-center min-h-[250px] lg:min-h-[320px] relative border-t-[12px] border-slate-400 shadow-2xl shadow-slate-400/5">
+              <div className="bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] border-slate-400 shadow-2xl shadow-slate-400/5">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-slate-400 opacity-10 blur-[120px]"></div>
-                <div className="flex items-center mb-10">
+                <div className="flex items-center mb-6">
                   <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Net Flow Total Out</span>
                   <InfoTooltip formula="Sum of ALL category monthly requirements (Paid + Unpaid). Your full monthly overhead." />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-5xl sm:text-6xl lg:text-7xl font-mono font-bold dark:text-white text-slate-950 tracking-tighter leading-none">
+                <div className="flex flex-col gap-1">
+                  <span className="text-4xl sm:text-5xl lg:text-6xl font-mono font-bold dark:text-white text-slate-950 tracking-tighter leading-none">
                     ₱{stats.totalMonthlyCommitments.toLocaleString()}
                   </span>
-                  <div className="mt-4 flex items-center space-x-2 opacity-60">
+                  <div className="mt-3 flex items-center space-x-2 opacity-60">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
                     <span className="text-[10px] font-bold uppercase tracking-widest">Monthly Capital Drain</span>
                   </div>
                 </div>
               </div>
 
-              <div className={`bento-card rounded-[3.5rem] p-10 lg:p-14 flex flex-col justify-center min-h-[250px] lg:min-h-[320px] relative border-t-[12px] transition-all duration-500 ${stats.safetyFactorValue >= 100 ? 'border-emerald-600 shadow-emerald-500/10' : stats.safetyFactorValue >= 50 ? 'border-amber-500 shadow-amber-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
+              <div className={`bento-card rounded-[2.5rem] px-10 py-5 lg:px-14 lg:py-6 flex flex-col justify-center min-h-[140px] lg:min-h-[190px] relative border-t-[10px] transition-all duration-500 ${stats.safetyFactorValue >= 100 ? 'border-emerald-600 shadow-emerald-500/10' : stats.safetyFactorValue >= 50 ? 'border-amber-500 shadow-amber-500/10' : 'border-rose-600 shadow-rose-500/10'}`}>
                 <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.safetyFactorValue >= 100 ? 'bg-emerald-500' : stats.safetyFactorValue >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
-                <div className="flex items-center mb-10">
+                <div className="flex items-center mb-6">
                   <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.5em]">Safety Factor</span>
                   <InfoTooltip formula="(Liquid Cash / Total Monthly Requirement) * 100. Measures what % of your total monthly needs is covered by current cash." />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className={`text-5xl sm:text-6xl lg:text-7xl font-mono font-bold tracking-tighter leading-none ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : stats.safetyFactorValue >= 50 ? 'text-amber-500' : 'text-rose-600'}`}>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-mono font-bold tracking-tighter leading-none ${stats.safetyFactorValue >= 100 ? 'text-emerald-500' : stats.safetyFactorValue >= 50 ? 'text-amber-500' : 'text-rose-600'}`}>
                     {stats.safetyFactorValue.toFixed(0)}%
                   </span>
-                  <div className="mt-4 flex items-center justify-between">
+                  <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Coverage Index</span>
