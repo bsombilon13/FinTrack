@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FinancialEntry, DashboardData, TransactionStatus } from './types';
 import FinancialCard from './components/FinancialCard';
-import { getFinancialInsights, InsightView } from './services/geminiService';
 import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
@@ -72,7 +71,6 @@ const DEFAULT_DATA: DashboardData = {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [isAiConnected, setIsAiConnected] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
@@ -97,9 +95,6 @@ const App: React.FC = () => {
     return DEFAULT_DATA;
   });
 
-  const [overviewInsight, setOverviewInsight] = useState<string>('');
-  const [isLoadingInsight, setIsLoadingInsight] = useState(false);
-
   useEffect(() => {
     localStorage.setItem('fintrack-data', JSON.stringify(data));
   }, [data]);
@@ -108,17 +103,6 @@ const App: React.FC = () => {
     document.documentElement.className = theme;
     localStorage.setItem('fintrack-theme', theme);
   }, [theme]);
-
-  // Use current aistudio context to determine AI availability
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setIsAiConnected(hasKey || !!process.env.API_KEY);
-      }
-    };
-    checkConnection();
-  }, []);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -213,42 +197,6 @@ const App: React.FC = () => {
     { name: 'Vault', amount: stats.vaultSavings, avg: stats.vaultSavings * 0.9 },
   ], [stats]);
 
-  const handleOpenKeySelection = async () => {
-    if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      setIsAiConnected(true);
-    }
-  };
-
-  const fetchOverviewInsight = useCallback(async (isRetry = false) => {
-    setIsLoadingInsight(true);
-    try {
-      const insight = await getFinancialInsights(data, 'overview');
-      setOverviewInsight(insight);
-      setIsAiConnected(true);
-    } catch (e: any) {
-      console.error("AI Insight Error:", e);
-      // Handle the case where the API key is invalid or model is missing by prompting for a key
-      if (e.message.includes("Requested entity was not found") || e.message === "API_KEY_MISSING") {
-        setIsAiConnected(false);
-        if (window.aistudio) {
-          await window.aistudio.openSelectKey();
-          // After calling openSelectKey, assume successful selection and proceed as per guidelines
-          setIsAiConnected(true);
-          if (!isRetry) fetchOverviewInsight(true);
-        }
-      } else {
-        setOverviewInsight("AI Strategy hub offline. View quantitative breakdown instead.");
-      }
-    } finally {
-      setIsLoadingInsight(false);
-    }
-  }, [data]);
-
-  useEffect(() => {
-    if (activeTab === 'overview' && !overviewInsight) fetchOverviewInsight();
-  }, [activeTab, fetchOverviewInsight, overviewInsight]);
-
   const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number) => {
     const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID };
     setData(prev => ({ ...prev, [section]: [...prev[section], newEntry] }));
@@ -305,21 +253,12 @@ const App: React.FC = () => {
             <div className="min-w-0 truncate">
               <h1 className="text-2xl font-black tracking-tight dark:text-white text-slate-900 leading-none truncate">FinTrack Pro</h1>
               <div className="flex items-center mt-2 space-x-2">
-                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] leading-none truncate">Intelligence Suite</span>
+                <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-[0.2em] leading-none truncate">Management Suite</span>
               </div>
             </div>
           </div>
           
           <div className="md:hidden flex items-center space-x-3">
-             {!isAiConnected && (
-               <button 
-                onClick={handleOpenKeySelection}
-                className="p-3 rounded-xl border border-amber-500/50 text-amber-500 hover:bg-amber-500 hover:text-white transition-all active:scale-95"
-                title="Connect AI Key"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
-              </button>
-             )}
              <button 
               onClick={handleExportPdf} 
               disabled={isExporting}
@@ -351,15 +290,6 @@ const App: React.FC = () => {
         </nav>
 
         <div className="hidden md:flex items-center space-x-4 shrink-0">
-          {!isAiConnected && (
-            <button 
-              onClick={handleOpenKeySelection}
-              className="flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-amber-600/20 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest hover:bg-amber-600 hover:text-white transition-all active:scale-95"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
-              <span>Connect AI</span>
-            </button>
-          )}
           <button 
             onClick={handleExportPdf} 
             disabled={isExporting}
@@ -381,15 +311,6 @@ const App: React.FC = () => {
       <main className="max-w-[1720px] mx-auto p-4 md:p-8 lg:p-12 space-y-12 pb-32 overflow-x-hidden">
         {activeTab === 'overview' && (
           <section key="overview" className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 animate-in">
-            {isLoadingInsight && (
-              <div className="md:col-span-12 bg-indigo-500/10 border border-indigo-500/20 rounded-[3rem] p-10 flex items-center justify-center space-x-4">
-                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <span className="text-xs font-black uppercase tracking-[0.3em] text-indigo-500">Strategizing...</span>
-              </div>
-            )}
-            
             <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-10">
               <div className={`bento-card rounded-[3.5rem] p-10 lg:p-14 flex flex-col justify-center min-h-[250px] lg:min-h-[320px] relative border-t-[12px] transition-all duration-500 ${stats.deployableFunds >= 0 ? 'border-indigo-600 shadow-2xl shadow-indigo-600/10' : 'border-rose-600 shadow-2xl shadow-rose-600/10'}`}>
                 <div className={`absolute top-0 right-0 w-80 h-80 blur-[120px] opacity-20 ${stats.deployableFunds >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}></div>
@@ -491,20 +412,6 @@ const App: React.FC = () => {
                 <span className="text-3xl xl:text-4xl font-mono font-bold text-emerald-500 break-all">₱{stats.vaultSavings.toLocaleString()}</span>
               </div>
             </div>
-
-            {overviewInsight && (
-              <div className="md:col-span-12 bento-card rounded-[3rem] p-10 lg:p-14 bg-indigo-600 text-white shadow-2xl shadow-indigo-600/30">
-                <div className="flex items-center space-x-3 mb-8">
-                  <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                  </div>
-                  <h3 className="text-sm font-black uppercase tracking-[0.4em]">AI Strategic Insight</h3>
-                </div>
-                <div className="prose prose-invert max-w-none text-indigo-50/90 font-medium leading-relaxed">
-                  <div className="whitespace-pre-wrap">{overviewInsight}</div>
-                </div>
-              </div>
-            )}
           </section>
         )}
 
