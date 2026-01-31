@@ -119,7 +119,10 @@ const FinancialCard: React.FC<FinancialCardProps> = ({
     }
   };
 
-  const displayTotal = customTotal !== undefined ? customTotal : entries.reduce((acc, curr) => acc + curr.amount, 0);
+  // Logic: If card has status, primary total only sums UNPAID items. Otherwise sums all.
+  const displayTotal = customTotal !== undefined ? customTotal : entries
+    .filter(e => !hasStatus || e.status !== TransactionStatus.PAID)
+    .reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
     <div className={`bento-card rounded-2xl p-5 flex flex-col h-full min-h-[520px] border-l-[6px] ${accentColor}`}>
