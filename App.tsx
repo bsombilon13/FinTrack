@@ -88,6 +88,7 @@ const App: React.FC = () => {
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
   const [payObligationId, setPayObligationId] = useState('');
   const [paySourceId, setPaySourceId] = useState('');
+  const [payTargetId, setPayTargetId] = useState(''); // Target for savings goals
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [theme, setTheme] = useState<Theme>(() => {
@@ -213,6 +214,10 @@ const App: React.FC = () => {
     }, { credits: 0, debits: 0 });
   }, [filteredTransactions]);
 
+  const isSavingsGoalSelected = useMemo(() => {
+    return (data.savingsContribution || []).some(o => o.id === payObligationId);
+  }, [data.savingsContribution, payObligationId]);
+
   const handleExportPdf = async () => {
     setIsExporting(true);
     try { await generateFinancialReport(data, stats, detailedForecast); } 
@@ -297,9 +302,13 @@ const App: React.FC = () => {
     const obligationCategories: Array<keyof DashboardData> = ['loans', 'subscriptions', 'savingsContribution', 'utilities', 'plans', 'mandatories', 'otherExpenses'];
     
     let targetObligation: FinancialEntry | undefined;
+    let targetCategory: string = '';
     for (const cat of obligationCategories) {
-      targetObligation = (data[cat] as FinancialEntry[] || []).find(o => o.id === payObligationId);
-      if (targetObligation) break;
+      targetObligation = (data[cat as keyof DashboardData] as FinancialEntry[] || []).find(o => o.id === payObligationId);
+      if (targetObligation) {
+        targetCategory = cat;
+        break;
+      }
     }
 
     if (!sourceEntry || !targetObligation) return;
@@ -314,17 +323,43 @@ const App: React.FC = () => {
 
     setData(prev => {
       const updated = { ...prev };
-      const updateAsset = (entries: FinancialEntry[] = []) => entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
-      updated.accountBalances = updateAsset(prev.accountBalances);
-      updated.savingsAccounts = updateAsset(prev.savingsAccounts);
+      
+      // 1. Subtract from source asset
+      const updateAssetSubtract = (entries: FinancialEntry[] = []) => 
+        entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
+      
+      updated.accountBalances = updateAssetSubtract(prev.accountBalances);
+      updated.savingsAccounts = updateAssetSubtract(prev.savingsAccounts);
 
+      // 2. Adjust target accounts (affected accounts)
+      // If it's a savings contribution, add to the target vault
+      if (targetCategory === 'savingsContribution' && payTargetId) {
+        updated.savingsAccounts = (updated.savingsAccounts || []).map(a => 
+          a.id === payTargetId ? { ...a, amount: a.amount + amount } : a
+        );
+      }
+
+      // 3. Mark obligation as PAID and adjust its own fields (like Total Debt for Loans)
       obligationCategories.forEach(cat => {
-        updated[cat] = (prev[cat] as FinancialEntry[] || []).map(o => o.id === payObligationId ? { ...o, status: TransactionStatus.PAID } : o) as any;
+        updated[cat as keyof DashboardData] = (prev[cat as keyof DashboardData] as FinancialEntry[] || []).map(o => {
+          if (o.id === payObligationId) {
+            const updatedEntry = { ...o, status: TransactionStatus.PAID };
+            // If it's a loan, decrease the Total Debt balance by the payment amount
+            if (cat === 'loans' && updatedEntry.totalAmount !== undefined) {
+              updatedEntry.totalAmount = Math.max(0, updatedEntry.totalAmount - amount);
+            }
+            return updatedEntry;
+          }
+          return o;
+        }) as any;
       });
+
+      // 4. Record Transaction
       updated.transactions = [newTx, ...(prev.transactions || [])];
       return updated;
     });
-    setPayObligationId(''); setPaySourceId('');
+
+    setPayObligationId(''); setPaySourceId(''); setPayTargetId('');
   };
 
   const deleteTransaction = (id: string) => {
@@ -603,6 +638,17 @@ const App: React.FC = () => {
                             {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                           </select>
                         </div>
+                        
+                        {isSavingsGoalSelected && (
+                          <div className="space-y-1 animate-in">
+                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Destination Vault (Affected Account)</label>
+                            <select value={payTargetId} onChange={(e) => setPayTargetId(e.target.value)} className="w-full bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-900/40 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                              <option value="">Select vault...</option>
+                              {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                            </select>
+                          </div>
+                        )}
+
                         <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
                       </form>
                     </div>
