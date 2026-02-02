@@ -26,6 +26,7 @@ export interface FinancialEntry {
   amount: number; // This represents the Monthly Payable or Current Balance
   totalAmount?: number; // This represents the Total Debt balance
   status?: TransactionStatus;
+  deadline?: string; // Optional due date for obligations
 }
 
 export interface FinancialSection {

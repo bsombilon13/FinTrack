@@ -45,18 +45,18 @@ const DEFAULT_DATA: DashboardData = {
     { id: '6', label: 'Client A Project', amount: 5000, status: TransactionStatus.PENDING },
   ],
   loans: [
-    { id: '7', label: 'Credit Card (Main)', amount: 1200, totalAmount: 12000, status: TransactionStatus.UNPAID },
+    { id: '7', label: 'Credit Card (Main)', amount: 1200, totalAmount: 12000, status: TransactionStatus.UNPAID, deadline: '2024-12-25' },
   ],
   subscriptions: [
-    { id: '8', label: 'Netflix', amount: 549, status: TransactionStatus.UNPAID },
-    { id: '9', label: 'Spotify', amount: 149, status: TransactionStatus.UNPAID },
+    { id: '8', label: 'Netflix', amount: 549, status: TransactionStatus.UNPAID, deadline: '2024-12-15' },
+    { id: '9', label: 'Spotify', amount: 149, status: TransactionStatus.UNPAID, deadline: '2024-12-12' },
   ],
   savingsContribution: [
     { id: '10', label: 'Emergency Fund', amount: 2000, status: TransactionStatus.UNPAID },
   ],
   utilities: [
-    { id: '11', label: 'Meralco', amount: 3500, status: TransactionStatus.UNPAID },
-    { id: '12', label: 'Maynilad', amount: 800, status: TransactionStatus.UNPAID },
+    { id: '11', label: 'Meralco', amount: 3500, status: TransactionStatus.UNPAID, deadline: '2024-12-20' },
+    { id: '12', label: 'Maynilad', amount: 800, status: TransactionStatus.UNPAID, deadline: '2024-12-22' },
   ],
   plans: [
     { id: '13', label: 'Insurance Plan', amount: 3200, status: TransactionStatus.UNPAID },
@@ -77,6 +77,9 @@ const App: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<TransactionType | 'All'>('All');
+  const [filterMonth, setFilterMonth] = useState('All');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   
   // Movement Forms
   const [txDesc, setTxDesc] = useState('');
@@ -97,6 +100,7 @@ const App: React.FC = () => {
   const [newOblLabel, setNewOblLabel] = useState('');
   const [newOblAmount, setNewOblAmount] = useState('');
   const [newOblTotalAmount, setNewOblTotalAmount] = useState('');
+  const [newOblDeadline, setNewOblDeadline] = useState('');
   const [newOblCategory, setNewOblCategory] = useState<keyof DashboardData>('utilities');
 
   // Transfer Form
@@ -210,15 +214,31 @@ const App: React.FC = () => {
     return months;
   }, [stats]);
 
+  const availableMonths = useMemo(() => {
+    const months: string[] = [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    // Generate months from 2023 to end of next year for a comprehensive list
+    for (let y = currentYear + 1; y >= 2023; y--) {
+      for (let m = 12; m >= 1; m--) {
+        months.push(`${y}-${m.toString().padStart(2, '0')}`);
+      }
+    }
+    return months;
+  }, []);
+
   const filteredTransactions = useMemo(() => {
     return (data.transactions || []).filter(tx => {
       const matchesSearch = 
         tx.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
         tx.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = filterType === 'All' || tx.type === filterType;
-      return matchesSearch && matchesType;
+      const matchesMonth = filterMonth === 'All' || tx.date.startsWith(filterMonth);
+      const matchesStartDate = !filterStartDate || tx.date >= filterStartDate;
+      const matchesEndDate = !filterEndDate || tx.date <= filterEndDate;
+      return matchesSearch && matchesType && matchesMonth && matchesStartDate && matchesEndDate;
     });
-  }, [data.transactions, searchQuery, filterType]);
+  }, [data.transactions, searchQuery, filterType, filterMonth, filterStartDate, filterEndDate]);
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -245,8 +265,8 @@ const App: React.FC = () => {
     { name: 'Vault', amount: stats.vaultSavings, avg: stats.vaultSavings * 0.9 },
   ], [stats]);
 
-  const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number) => {
-    const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID };
+  const addEntry = (section: keyof DashboardData, label: string, amount: number, totalAmount?: number, deadline?: string) => {
+    const newEntry: FinancialEntry = { id: generateId(), label, amount, totalAmount, status: TransactionStatus.UNPAID, deadline };
     setData(prev => ({ ...prev, [section]: [...(Array.isArray(prev[section]) ? prev[section] : []), newEntry] }));
   };
 
@@ -258,12 +278,12 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, [section]: (Array.isArray(prev[section]) ? prev[section] : []).map((e: any) => e.id === id ? { ...e, status } : e) }));
   };
 
-  const updateEntry = (id: string, label: string, amount: number, totalAmount?: number) => {
+  const updateEntry = (id: string, label: string, amount: number, totalAmount?: number, deadline?: string) => {
     setData(prev => {
       const newData = { ...prev };
       (Object.keys(newData) as Array<keyof DashboardData>).forEach(section => {
         if (Array.isArray(newData[section]) && section !== 'transactions') {
-           newData[section] = (newData[section] as any[]).map((e: any) => e.id === id ? { ...e, label, amount, totalAmount } : e);
+           newData[section] = (newData[section] as any[]).map((e: any) => e.id === id ? { ...e, label, amount, totalAmount, deadline } : e);
         }
       });
       return newData;
@@ -422,8 +442,8 @@ const App: React.FC = () => {
     const totalAmount = newOblCategory === 'loans' ? parseFloat(newOblTotalAmount) : undefined;
     
     if (newOblLabel.trim() && !isNaN(amount)) {
-      addEntry(newOblCategory, newOblLabel.trim(), amount, totalAmount);
-      setNewOblLabel(''); setNewOblAmount(''); setNewOblTotalAmount('');
+      addEntry(newOblCategory, newOblLabel.trim(), amount, totalAmount, newOblDeadline || undefined);
+      setNewOblLabel(''); setNewOblAmount(''); setNewOblTotalAmount(''); setNewOblDeadline('');
       alert(`Added "${newOblLabel}" to ${newOblCategory.toUpperCase()}. Switch to Obligations tab to see it.`);
     }
   };
@@ -435,6 +455,14 @@ const App: React.FC = () => {
       const reverse = (entries: FinancialEntry[] = []) => entries.map(e => e.id === tx.sourceId ? { ...e, amount: tx.type === TransactionType.CREDIT ? e.amount - tx.amount : e.amount + tx.amount } : e);
       return { ...prev, accountBalances: reverse(prev.accountBalances), savingsAccounts: reverse(prev.savingsAccounts), transactions: (prev.transactions || []).filter(t => t.id !== id) };
     });
+  };
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setFilterType('All');
+    setFilterMonth('All');
+    setFilterStartDate('');
+    setFilterEndDate('');
   };
 
   const TABS: TabConfig[] = [
@@ -780,13 +808,17 @@ const App: React.FC = () => {
                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Amount</label>
                             <input type="number" placeholder="0.00" value={newOblAmount} onChange={(e) => setNewOblAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" required />
                           </div>
-                          {newOblCategory === 'loans' && (
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Debt Balance</label>
-                              <input type="number" placeholder="0.00" value={newOblTotalAmount} onChange={(e) => setNewOblTotalAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" />
-                            </div>
-                          )}
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Due Date</label>
+                            <input type="date" value={newOblDeadline} onChange={(e) => setNewOblDeadline(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-rose-500 transition-all" />
+                          </div>
                         </div>
+                        {newOblCategory === 'loans' && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Debt Balance</label>
+                            <input type="number" placeholder="0.00" value={newOblTotalAmount} onChange={(e) => setNewOblTotalAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" />
+                          </div>
+                        )}
                         <button type="submit" className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Add Obligation</button>
                       </form>
                     </div>
@@ -808,31 +840,78 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="bento-card rounded-[2.5rem] p-10 flex flex-col min-h-[500px]">
-                  <div className="flex justify-between items-center mb-10">
-                    <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Capital Ledger</h2>
-                    <div className="flex gap-4">
-                      <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-5 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
-                      <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
-                        <option value="All">All Types</option>
-                        <option value={TransactionType.CREDIT}>Credits</option>
-                        <option value={TransactionType.DEBIT}>Debits</option>
-                      </select>
+                  <div className="flex flex-col space-y-8 mb-10">
+                    <div className="flex justify-between items-center">
+                      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Capital Ledger</h2>
+                      <button onClick={resetFilters} className="text-[10px] font-black uppercase text-indigo-500 hover:text-indigo-600 transition-colors">Reset All Filters</button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {/* Search */}
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Search</label>
+                        <input type="text" placeholder="Description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
+                      </div>
+                      
+                      {/* Quick Month */}
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Quick Month</label>
+                        <select value={filterMonth} onChange={(e) => { setFilterMonth(e.target.value); setFilterStartDate(''); setFilterEndDate(''); }} className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
+                          <option value="All">All Time</option>
+                          {availableMonths.map(m => (
+                            <option key={m} value={m}>
+                              {new Date(m + "-01").toLocaleDateString('default', { month: 'long', year: 'numeric' })}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Start Date */}
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Start Date</label>
+                        <input type="date" value={filterStartDate} onChange={(e) => { setFilterStartDate(e.target.value); setFilterMonth('All'); }} className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
+                      </div>
+
+                      {/* End Date */}
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">End Date</label>
+                        <input type="date" value={filterEndDate} onChange={(e) => { setFilterEndDate(e.target.value); setFilterMonth('All'); }} className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none" />
+                      </div>
+
+                      {/* Type Filter */}
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Type</label>
+                        <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold outline-none cursor-pointer">
+                          <option value="All">All Types</option>
+                          <option value={TransactionType.CREDIT}>Credits Only</option>
+                          <option value={TransactionType.DEBIT}>Debits Only</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
+
                   <div className="flex-grow overflow-x-auto no-scrollbar">
                     <table className="w-full text-left border-collapse">
                       <thead><tr className="border-b dark:border-slate-800 border-slate-100"><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Date</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Description</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Source</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400">Type</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400 text-right">Amount</th><th className="pb-6 text-[10px] font-black uppercase text-slate-400"></th></tr></thead>
                       <tbody className="divide-y dark:divide-slate-800/40 divide-slate-100/40">
-                        {filteredTransactions.map((tx) => (
-                          <tr key={tx.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
-                            <td className="py-5 font-mono text-[11px] text-slate-500">{tx.date}</td>
-                            <td className="py-5 text-sm font-black">{tx.description}</td>
-                            <td className="py-5"><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg">{tx.sourceLabel}</span></td>
-                            <td className="py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border ${tx.type === TransactionType.CREDIT ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{tx.type}</span></td>
-                            <td className={`py-5 text-right font-mono text-sm font-bold ${tx.type === TransactionType.CREDIT ? 'text-emerald-500' : 'text-rose-500'}`}>{tx.type === TransactionType.CREDIT ? '+' : '-'}₱{tx.amount.toLocaleString()}</td>
-                            <td className="py-5 text-right"><button onClick={() => deleteTransaction(tx.id)} className="p-2 opacity-0 group-hover:opacity-100 hover:text-rose-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                        {filteredTransactions.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-20 text-center">
+                              <span className="text-xs font-bold uppercase tracking-widest text-slate-500 opacity-40">No transactions found for these filters</span>
+                            </td>
                           </tr>
-                        ))}
+                        ) : (
+                          filteredTransactions.map((tx) => (
+                            <tr key={tx.id} className="group hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
+                              <td className="py-5 font-mono text-[11px] text-slate-500">{tx.date}</td>
+                              <td className="py-5 text-sm font-black">{tx.description}</td>
+                              <td className="py-5"><span className="text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg">{tx.sourceLabel}</span></td>
+                              <td className="py-5"><span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border ${tx.type === TransactionType.CREDIT ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{tx.type}</span></td>
+                              <td className={`py-5 text-right font-mono text-sm font-bold ${tx.type === TransactionType.CREDIT ? 'text-emerald-500' : 'text-rose-500'}`}>{tx.type === TransactionType.CREDIT ? '+' : '-'}₱{tx.amount.toLocaleString()}</td>
+                              <td className="py-5 text-right"><button onClick={() => deleteTransaction(tx.id)} className="p-2 opacity-0 group-hover:opacity-100 hover:text-rose-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -852,13 +931,13 @@ const App: React.FC = () => {
 
         {activeTab === 'obligations' && (
           <div key="obligations" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in">
-            <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans || []} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t) => addEntry('loans', l, a, t)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t) => updateEntry(id, l, a, t)} secondaryTotal={stats.categoryTotals.loans} />
-            <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities || []} accentColor="border-sky-500" hasStatus onAdd={(l, a) => addEntry('utilities', l, a)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.utilities} />
-            <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories || []} accentColor="border-slate-500" hasStatus onAdd={(l, a) => addEntry('mandatories', l, a)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.mandatories} />
-            <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions || []} accentColor="border-red-600" hasStatus onAdd={(l, a) => addEntry('subscriptions', l, a)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.subscriptions} />
-            <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans || []} accentColor="border-indigo-400" hasStatus onAdd={(l, a) => addEntry('plans', l, a)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.plans} />
-            <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution || []} accentColor="border-emerald-400" hasStatus onAdd={(l, a) => addEntry('savingsContribution', l, a)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.savings} />
-            <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses || []} accentColor="border-amber-400" hasStatus onAdd={(l, a) => addEntry('otherExpenses', l, a)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={updateEntry} secondaryTotal={stats.categoryTotals.expenses} />
+            <FinancialCard title="Loans & Debt" totalLabel="Unpaid" entries={data.loans || []} accentColor="border-rose-600" isDebt hasStatus onAdd={(l, a, t, d) => addEntry('loans', l, a, t, d)} onDelete={(id) => deleteEntry('loans', id)} onUpdateStatus={(id, s) => updateStatus('loans', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.loans} />
+            <FinancialCard title="Utilities" totalLabel="Unpaid" entries={data.utilities || []} accentColor="border-sky-500" hasStatus onAdd={(l, a, t, d) => addEntry('utilities', l, a, t, d)} onDelete={(id) => deleteEntry('utilities', id)} onUpdateStatus={(id, s) => updateStatus('utilities', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.utilities} />
+            <FinancialCard title="Mandatory" totalLabel="Unpaid" entries={data.mandatories || []} accentColor="border-slate-500" hasStatus onAdd={(l, a, t, d) => addEntry('mandatories', l, a, t, d)} onDelete={(id) => deleteEntry('mandatories', id)} onUpdateStatus={(id, s) => updateStatus('mandatories', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.mandatories} />
+            <FinancialCard title="Subscriptions" totalLabel="Unpaid" entries={data.subscriptions || []} accentColor="border-red-600" hasStatus onAdd={(l, a, t, d) => addEntry('subscriptions', l, a, t, d)} onDelete={(id) => deleteEntry('subscriptions', id)} onUpdateStatus={(id, s) => updateStatus('subscriptions', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.subscriptions} />
+            <FinancialCard title="Plans" totalLabel="Unpaid" entries={data.plans || []} accentColor="border-indigo-400" hasStatus onAdd={(l, a, t, d) => addEntry('plans', l, a, t, d)} onDelete={(id) => deleteEntry('plans', id)} onUpdateStatus={(id, s) => updateStatus('plans', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.plans} />
+            <FinancialCard title="Savings Goals" totalLabel="Unpaid" entries={data.savingsContribution || []} accentColor="border-emerald-400" hasStatus onAdd={(l, a, t, d) => addEntry('savingsContribution', l, a, t, d)} onDelete={(id) => deleteEntry('savingsContribution', id)} onUpdateStatus={(id, s) => updateStatus('savingsContribution', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.savings} />
+            <FinancialCard title="Other" totalLabel="Unpaid" entries={data.otherExpenses || []} accentColor="border-amber-400" hasStatus onAdd={(l, a, t, d) => addEntry('otherExpenses', l, a, t, d)} onDelete={(id) => deleteEntry('otherExpenses', id)} onUpdateStatus={(id, s) => updateStatus('otherExpenses', id, s)} onUpdateEntry={(id, l, a, t, d) => updateEntry(id, l, a, t, d)} secondaryTotal={stats.categoryTotals.expenses} />
           </div>
         )}
       </main>
