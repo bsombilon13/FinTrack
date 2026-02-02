@@ -6,7 +6,7 @@ import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
 type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'forecast';
-type TransactionFormMode = 'movement' | 'settle';
+type TransactionFormMode = 'movement' | 'settle' | 'add_obligation';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -86,10 +86,18 @@ const App: React.FC = () => {
   const [txRevenueId, setTxRevenueId] = useState('');
   const [txCustomRevenueLabel, setTxCustomRevenueLabel] = useState('');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Settle Form
   const [payObligationId, setPayObligationId] = useState('');
   const [paySourceId, setPaySourceId] = useState('');
-  const [payTargetId, setPayTargetId] = useState(''); // Target for savings goals
+  const [payTargetId, setPayTargetId] = useState(''); 
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Add Obligation Form
+  const [newOblLabel, setNewOblLabel] = useState('');
+  const [newOblAmount, setNewOblAmount] = useState('');
+  const [newOblTotalAmount, setNewOblTotalAmount] = useState('');
+  const [newOblCategory, setNewOblCategory] = useState<keyof DashboardData>('utilities');
 
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
@@ -323,28 +331,18 @@ const App: React.FC = () => {
 
     setData(prev => {
       const updated = { ...prev };
-      
-      // 1. Subtract from source asset
-      const updateAssetSubtract = (entries: FinancialEntry[] = []) => 
-        entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
-      
+      const updateAssetSubtract = (entries: FinancialEntry[] = []) => entries.map(e => e.id === paySourceId ? { ...e, amount: e.amount - amount } : e);
       updated.accountBalances = updateAssetSubtract(prev.accountBalances);
       updated.savingsAccounts = updateAssetSubtract(prev.savingsAccounts);
 
-      // 2. Adjust target accounts (affected accounts)
-      // If it's a savings contribution, add to the target vault
       if (targetCategory === 'savingsContribution' && payTargetId) {
-        updated.savingsAccounts = (updated.savingsAccounts || []).map(a => 
-          a.id === payTargetId ? { ...a, amount: a.amount + amount } : a
-        );
+        updated.savingsAccounts = (updated.savingsAccounts || []).map(a => a.id === payTargetId ? { ...a, amount: a.amount + amount } : a);
       }
 
-      // 3. Mark obligation as PAID and adjust its own fields (like Total Debt for Loans)
       obligationCategories.forEach(cat => {
         updated[cat as keyof DashboardData] = (prev[cat as keyof DashboardData] as FinancialEntry[] || []).map(o => {
           if (o.id === payObligationId) {
             const updatedEntry = { ...o, status: TransactionStatus.PAID };
-            // If it's a loan, decrease the Total Debt balance by the payment amount
             if (cat === 'loans' && updatedEntry.totalAmount !== undefined) {
               updatedEntry.totalAmount = Math.max(0, updatedEntry.totalAmount - amount);
             }
@@ -354,12 +352,22 @@ const App: React.FC = () => {
         }) as any;
       });
 
-      // 4. Record Transaction
       updated.transactions = [newTx, ...(prev.transactions || [])];
       return updated;
     });
-
     setPayObligationId(''); setPaySourceId(''); setPayTargetId('');
+  };
+
+  const handleAddObligationFromTransactions = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(newOblAmount);
+    const totalAmount = newOblCategory === 'loans' ? parseFloat(newOblTotalAmount) : undefined;
+    
+    if (newOblLabel.trim() && !isNaN(amount)) {
+      addEntry(newOblCategory, newOblLabel.trim(), amount, totalAmount);
+      setNewOblLabel(''); setNewOblAmount(''); setNewOblTotalAmount('');
+      alert(`Added "${newOblLabel}" to ${newOblCategory.toUpperCase()}. Switch to Obligations tab to see it.`);
+    }
   };
 
   const deleteTransaction = (id: string) => {
@@ -543,28 +551,18 @@ const App: React.FC = () => {
           <section key="transactions" className="space-y-10 animate-in">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
               <div className="xl:col-span-4 flex flex-col">
-                <div className={`bento-card rounded-[2.5rem] p-8 border-t-[10px] shadow-xl transition-colors duration-500 ${transactionFormMode === 'movement' ? 'border-indigo-600 shadow-indigo-600/5' : 'border-emerald-600 shadow-emerald-600/5'}`}>
-                  {/* Form Toggle Button */}
-                  <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl mb-8">
-                    <button 
-                      onClick={() => setTransactionFormMode('movement')}
-                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
-                        transactionFormMode === 'movement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      General Movement
-                    </button>
-                    <button 
-                      onClick={() => setTransactionFormMode('settle')}
-                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
-                        transactionFormMode === 'settle' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      Settle Obligation
-                    </button>
+                <div className={`bento-card rounded-[2.5rem] p-8 border-t-[10px] shadow-xl transition-colors duration-500 ${
+                  transactionFormMode === 'movement' ? 'border-indigo-600' : 
+                  transactionFormMode === 'settle' ? 'border-emerald-600' : 'border-rose-600'
+                }`}>
+                  {/* Form Toggle Buttons */}
+                  <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl mb-8 gap-1">
+                    <button onClick={() => setTransactionFormMode('movement')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'movement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Movement</button>
+                    <button onClick={() => setTransactionFormMode('settle')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'settle' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Settle</button>
+                    <button onClick={() => setTransactionFormMode('add_obligation')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'add_obligation' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>New Obl.</button>
                   </div>
 
-                  {transactionFormMode === 'movement' ? (
+                  {transactionFormMode === 'movement' && (
                     <div className="animate-in">
                       <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Record Movement</h2>
                       <form onSubmit={handleAddGeneralMovement} className="space-y-6">
@@ -603,22 +601,24 @@ const App: React.FC = () => {
                           </div>
                         )}
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Source / Target Account</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account</label>
                           <select value={txSource} onChange={(e) => setTxSource(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                             <option value="">Select account...</option>
-                            <optgroup label="Liquid Cash">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
+                            <optgroup label="Liquid">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
                             <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</optgroup>
                           </select>
                         </div>
-                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record Movement</button>
+                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Record</button>
                       </form>
                     </div>
-                  ) : (
+                  )}
+
+                  {transactionFormMode === 'settle' && (
                     <div className="animate-in">
                       <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Settle Obligation</h2>
                       <form onSubmit={handleSettleObligation} className="space-y-6">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Obligation to Pay</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Obligation</label>
                           <select value={payObligationId} onChange={(e) => setPayObligationId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                             <option value="">Pending Obligations...</option>
                             {['loans', 'utilities', 'subscriptions', 'mandatories', 'plans', 'savingsContribution', 'otherExpenses'].map(cat => (
@@ -631,25 +631,60 @@ const App: React.FC = () => {
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Asset Source</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Source</label>
                           <select value={paySourceId} onChange={(e) => setPaySourceId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                             <option value="">Select account...</option>
                             {(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                             {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                           </select>
                         </div>
-                        
                         {isSavingsGoalSelected && (
                           <div className="space-y-1 animate-in">
-                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Destination Vault (Affected Account)</label>
+                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Destination Vault</label>
                             <select value={payTargetId} onChange={(e) => setPayTargetId(e.target.value)} className="w-full bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200 dark:border-indigo-900/40 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
                               <option value="">Select vault...</option>
                               {(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                             </select>
                           </div>
                         )}
+                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
+                      </form>
+                    </div>
+                  )}
 
-                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
+                  {transactionFormMode === 'add_obligation' && (
+                    <div className="animate-in">
+                      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">New Obligation</h2>
+                      <form onSubmit={handleAddObligationFromTransactions} className="space-y-6">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Category</label>
+                          <select value={newOblCategory} onChange={(e) => setNewOblCategory(e.target.value as any)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer">
+                            <option value="loans">Loans & Debt</option>
+                            <option value="utilities">Utilities</option>
+                            <option value="subscriptions">Subscriptions</option>
+                            <option value="mandatories">Mandatories</option>
+                            <option value="plans">Plans</option>
+                            <option value="savingsContribution">Savings Contribution</option>
+                            <option value="otherExpenses">Other Expenses</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Label / Name</label>
+                          <input type="text" placeholder="e.g. Electricity, Car Loan..." value={newOblLabel} onChange={(e) => setNewOblLabel(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-rose-500 transition-all" required />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Amount</label>
+                            <input type="number" placeholder="0.00" value={newOblAmount} onChange={(e) => setNewOblAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" required />
+                          </div>
+                          {newOblCategory === 'loans' && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Debt Balance</label>
+                              <input type="number" placeholder="0.00" value={newOblTotalAmount} onChange={(e) => setNewOblTotalAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" />
+                            </div>
+                          )}
+                        </div>
+                        <button type="submit" className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Add Obligation</button>
                       </form>
                     </div>
                   )}
@@ -657,7 +692,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="xl:col-span-8 flex flex-col space-y-8">
-                {/* Transaction Summary Section */}
+                {/* Summary Section */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="bento-card rounded-[2rem] p-6 border-l-[8px] border-emerald-500">
                     <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 block mb-2">Total Credits (Filtered)</span>
