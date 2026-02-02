@@ -6,7 +6,7 @@ import { generateFinancialReport } from './services/pdfService';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Area, Cell, Legend, LabelList } from 'recharts';
 
 type TabType = 'overview' | 'assets' | 'obligations' | 'transactions' | 'forecast';
-type TransactionFormMode = 'movement' | 'settle' | 'add_obligation';
+type TransactionFormMode = 'movement' | 'settle' | 'add_obligation' | 'transfer';
 type Theme = 'dark' | 'light';
 
 interface TabConfig {
@@ -78,7 +78,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<TransactionType | 'All'>('All');
   
-  // Forms
+  // Movement Forms
   const [txDesc, setTxDesc] = useState('');
   const [txType, setTxType] = useState<TransactionType>(TransactionType.DEBIT);
   const [txAmount, setTxAmount] = useState('');
@@ -98,6 +98,12 @@ const App: React.FC = () => {
   const [newOblAmount, setNewOblAmount] = useState('');
   const [newOblTotalAmount, setNewOblTotalAmount] = useState('');
   const [newOblCategory, setNewOblCategory] = useState<keyof DashboardData>('utilities');
+
+  // Transfer Form
+  const [xferFromId, setXferFromId] = useState('');
+  const [xferToId, setXferToId] = useState('');
+  const [xferAmount, setXferAmount] = useState('');
+  const [xferFee, setXferFee] = useState('');
 
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
@@ -358,6 +364,58 @@ const App: React.FC = () => {
     setPayObligationId(''); setPaySourceId(''); setPayTargetId('');
   };
 
+  const handleTransferFunds = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(xferAmount);
+    const fee = parseFloat(xferFee) || 0;
+    if (!xferFromId || !xferToId || isNaN(amount) || amount <= 0) return;
+    if (xferFromId === xferToId) return;
+
+    const fromEntry = [...(data.accountBalances || []), ...(data.savingsAccounts || [])].find(a => a.id === xferFromId);
+    const toEntry = [...(data.accountBalances || []), ...(data.savingsAccounts || [])].find(a => a.id === xferToId);
+
+    if (!fromEntry || !toEntry) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const debitTx: Transaction = {
+      id: generateId(),
+      description: `Xfer Out to ${toEntry.label} (Fee: ₱${fee})`,
+      type: TransactionType.DEBIT,
+      amount: amount + fee,
+      date: today,
+      sourceId: xferFromId,
+      sourceLabel: fromEntry.label
+    };
+
+    const creditTx: Transaction = {
+      id: generateId(),
+      description: `Xfer In from ${fromEntry.label}`,
+      type: TransactionType.CREDIT,
+      amount: amount,
+      date: today,
+      sourceId: xferToId,
+      sourceLabel: toEntry.label
+    };
+
+    setData(prev => {
+      const updated = { ...prev };
+      const updateAssets = (entries: FinancialEntry[] = []) => 
+        entries.map(e => {
+          if (e.id === xferFromId) return { ...e, amount: e.amount - (amount + fee) };
+          if (e.id === xferToId) return { ...e, amount: e.amount + amount };
+          return e;
+        });
+
+      updated.accountBalances = updateAssets(prev.accountBalances);
+      updated.savingsAccounts = updateAssets(prev.savingsAccounts);
+      updated.transactions = [debitTx, creditTx, ...(prev.transactions || [])];
+      return updated;
+    });
+
+    setXferAmount(''); setXferFee(''); setXferFromId(''); setXferToId('');
+  };
+
   const handleAddObligationFromTransactions = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(newOblAmount);
@@ -553,13 +611,15 @@ const App: React.FC = () => {
               <div className="xl:col-span-4 flex flex-col">
                 <div className={`bento-card rounded-[2.5rem] p-8 border-t-[10px] shadow-xl transition-colors duration-500 ${
                   transactionFormMode === 'movement' ? 'border-indigo-600' : 
-                  transactionFormMode === 'settle' ? 'border-emerald-600' : 'border-rose-600'
+                  transactionFormMode === 'settle' ? 'border-emerald-600' : 
+                  transactionFormMode === 'transfer' ? 'border-amber-500' : 'border-rose-600'
                 }`}>
                   {/* Form Toggle Buttons */}
                   <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl mb-8 gap-1">
-                    <button onClick={() => setTransactionFormMode('movement')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'movement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Movement</button>
-                    <button onClick={() => setTransactionFormMode('settle')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'settle' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Settle</button>
-                    <button onClick={() => setTransactionFormMode('add_obligation')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'add_obligation' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>New Obl.</button>
+                    <button onClick={() => setTransactionFormMode('movement')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'movement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Move</button>
+                    <button onClick={() => setTransactionFormMode('settle')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'settle' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Settle</button>
+                    <button onClick={() => setTransactionFormMode('transfer')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'transfer' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>Transfer</button>
+                    <button onClick={() => setTransactionFormMode('add_obligation')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${transactionFormMode === 'add_obligation' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>New Obl.</button>
                   </div>
 
                   {transactionFormMode === 'movement' && (
@@ -648,6 +708,49 @@ const App: React.FC = () => {
                           </div>
                         )}
                         <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Confirm Payment</button>
+                      </form>
+                    </div>
+                  )}
+
+                  {transactionFormMode === 'transfer' && (
+                    <div className="animate-in">
+                      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Transfer Funds</h2>
+                      <form onSubmit={handleTransferFunds} className="space-y-6">
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">From Account</label>
+                            <select value={xferFromId} onChange={(e) => setXferFromId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                              <option value="">Select Source...</option>
+                              <optgroup label="Liquid">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label} (₱{a.amount.toLocaleString()})</option>)}</optgroup>
+                              <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label} (₱{a.amount.toLocaleString()})</option>)}</optgroup>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">To Account</label>
+                            <select value={xferToId} onChange={(e) => setXferToId(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none cursor-pointer" required>
+                              <option value="">Select Destination...</option>
+                              <optgroup label="Liquid">{(data.accountBalances || []).map(a => <option key={a.id} value={a.id}>{a.label} (₱{a.amount.toLocaleString()})</option>)}</optgroup>
+                              <optgroup label="Vaults">{(data.savingsAccounts || []).map(a => <option key={a.id} value={a.id}>{a.label} (₱{a.amount.toLocaleString()})</option>)}</optgroup>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</label>
+                            <input type="number" placeholder="0.00" value={xferAmount} onChange={(e) => setXferAmount(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-amber-500" required />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fee</label>
+                            <input type="number" placeholder="0.00" value={xferFee} onChange={(e) => setXferFee(e.target.value)} className="w-full bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-amber-500" />
+                          </div>
+                        </div>
+                        {xferAmount && (
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                            <span className="text-[10px] font-black uppercase text-amber-500 block">Total Deducted from Source</span>
+                            <span className="text-lg font-mono font-bold">₱{( (parseFloat(xferAmount) || 0) + (parseFloat(xferFee) || 0) ).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition-all text-[10px] uppercase tracking-widest">Execute Transfer</button>
                       </form>
                     </div>
                   )}
